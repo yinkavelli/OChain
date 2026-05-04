@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/eapi/:path*",
+      "destination": "https://eapi.binance.com/eapi/:path*"
+    }
+  ]
+}
