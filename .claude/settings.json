@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"http://localhost:5174/eapi/v1/index?underlying=BTCUSDT\")",
+      "Bash(curl -s \"https://api.binance.com/api/v3/ticker/24hr?symbol=DOGEUSDT\")",
+      "Bash(curl -s \"https://eapi.binance.com/eapi/v1/index?underlying=BTCUSDT\")",
+      "Bash(curl -s -I \"https://eapi.binance.com/eapi/v1/index?underlying=BTCUSDT\")",
+      "Bash(curl -s -I \"https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT\")",
+      "Bash(sed -i 's/<AssetSelector assets={ASSETS}/<AssetSelector assets={assets}/g' src/App.tsx)",
+      "Bash(sed -i 's/<IVChart assets={ASSETS}/<IVChart assets={assets}/g' src/App.tsx)",
+      "Bash(pkill -f \"vite --port\")",
+      "Bash(curl -s \"http://localhost:5173/eapi/v1/index?underlying=BTCUSDT\")",
+      "Bash(curl -s \"https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22DOGEUSDT%22%5D\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d[0]['symbol'], d[0]['lastPrice']\\)\")",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
