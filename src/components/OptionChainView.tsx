@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import type { LiveAsset, LiveContract } from '../lib/binanceApi'
-import type { Asset } from '../data/mockData'
 import { ASSETS } from '../data/mockData'
 
 // ── Formatting ────────────────────────────────────────────────────────
@@ -103,23 +102,6 @@ function buildLiveChain(contracts: LiveContract[], expiry: string, price: number
   }).filter(r => r.call.bid > 0 || r.put.bid > 0 || r.call.iv > 0 || r.put.iv > 0)
 }
 
-function buildMockChain(asset: Asset): ChainRow[] {
-  const price = asset.price
-  const iv    = asset.iv30
-  return Array.from({ length: 13 }, (_, i) => {
-    const strike    = Math.round(price * (0.88 + i * 0.02))
-    const moneyness = (price - strike) / price
-    const callBid   = Math.max(0.001, Math.max(0, price - strike) + price * (iv / 100) * 0.12)
-    const putBid    = Math.max(0.001, Math.max(0, strike - price) + price * (iv / 100) * 0.12)
-    const cDelta    = Math.max(0.01, Math.min(0.99, 0.5 + moneyness * 4))
-    return {
-      strike,
-      call: { bid: +callBid.toFixed(4), ask: +(callBid * 1.04).toFixed(4), iv, delta: cDelta,  gamma: 0.002, theta: -price * 0.0003, vega: price * 0.01, volume: 0, oi: 0 },
-      put:  { bid: +putBid.toFixed(4),  ask: +(putBid  * 1.04).toFixed(4), iv, delta: -(1 - cDelta), gamma: 0.002, theta: -price * 0.0003, vega: price * 0.01, volume: 0, oi: 0 },
-      isATM: Math.abs(strike - price) / price < 0.015,
-    }
-  })
-}
 
 // ── Scrollable table ──────────────────────────────────────────────────
 
@@ -196,62 +178,116 @@ function ChainTable({ rows, side }: { rows: ChainRow[]; side: 'call' | 'put'; pr
 
 interface Props { selectedAsset: string }
 
+// Assets that have options on Binance European Options
+const OPTIONS_ASSETS = new Set(['BTCUSDT', 'ETHUSDT'])
+
+const NO_OPTIONS_INFO: Record<string, { venue: string; url: string }> = {
+  BNBUSDT:  { venue: 'Binance options not available for BNB', url: 'https://www.binance.com/en/options' },
+  SOLUSDT:  { venue: 'Deribit lists SOL options',             url: 'https://www.deribit.com' },
+  XRPUSDT:  { venue: 'No major venue lists XRP options yet',  url: '' },
+  DOGEUSDT: { venue: 'No major venue lists DOGE options yet', url: '' },
+}
+
+function NoOptionsState({ symbol, price }: { symbol: string; price: number }) {
+  const asset = symbol.replace('USDT', '')
+  const info  = NO_OPTIONS_INFO[symbol]
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl border border-[#1e1e3f] bg-[#0d0d20] p-6 text-center space-y-4"
+    >
+      <div className="w-14 h-14 rounded-2xl bg-slate-800/60 border border-slate-700/40 flex items-center justify-center mx-auto text-2xl font-bold text-slate-500">
+        {asset[0]}
+      </div>
+      <div>
+        <p className="text-base font-bold text-white mb-1">{asset} Options</p>
+        <p className="text-sm text-slate-400 leading-relaxed">
+          Binance European Options only lists <span className="text-indigo-300 font-medium">BTC</span> and{' '}
+          <span className="text-indigo-300 font-medium">ETH</span> contracts.
+          {asset} does not have an options market on this exchange.
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-indigo-950/40 border border-indigo-800/30 p-3 text-left">
+        <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Live spot price</p>
+        <p className="text-xl font-bold font-mono text-white">{fmtPrice(price)}</p>
+        <p className="text-xs text-slate-500 mt-1">Source: Binance spot · refreshes every 30s</p>
+      </div>
+
+      {info?.venue && (
+        <div className="rounded-xl bg-slate-800/40 border border-slate-700/30 p-3 text-left">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Alternative venue</p>
+          <p className="text-xs text-slate-300">{info.venue}</p>
+          {info.url && (
+            <a href={info.url} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-indigo-400 hover:text-indigo-300 mt-1 inline-block">
+              Visit {info.url.replace('https://', '')} →
+            </a>
+          )}
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
 export function OptionChainView({ selectedAsset }: Props) {
   const { data: liveAssets } = useQuery<LiveAsset[]>({ queryKey: ['binance-options'], enabled: false })
 
-  const liveAsset  = liveAssets?.find(a => a.symbol === selectedAsset)
-  const mockAsset  = ASSETS.find(a => a.symbol === selectedAsset) || ASSETS[0]
-  const price      = liveAsset?.price || mockAsset.price
-  const isLive     = !!(liveAsset?.contracts?.length)
+  const liveAsset = liveAssets?.find(a => a.symbol === selectedAsset)
+  const mockAsset = ASSETS.find(a => a.symbol === selectedAsset) || ASSETS[0]
+  const price     = liveAsset?.price || mockAsset.price
+  const hasOptions = OPTIONS_ASSETS.has(selectedAsset)
+  const isLive    = hasOptions && !!(liveAsset?.contracts?.length)
 
   const expiryDates = useMemo(() => {
     if (isLive) return liveAsset!.expiryDates.slice(0, 6)
-    return ['2026-05-16', '2026-05-23', '2026-05-30', '2026-06-27']
+    return []
   }, [isLive, liveAsset])
 
-  const [expiry, setExpiry]   = useState<string>('')
-  const [side, setSide]       = useState<'call' | 'put'>('call')
+  const [expiry, setExpiry] = useState<string>('')
+  const [side,   setSide]   = useState<'call' | 'put'>('call')
 
   const activeExpiry = expiry || expiryDates[0] || ''
 
   const chain: ChainRow[] = useMemo(() => {
-    if (isLive && activeExpiry) {
-      const rows = buildLiveChain(liveAsset!.contracts, activeExpiry, price)
-      if (rows.length) return rows
-    }
-    return buildMockChain(mockAsset)
-  }, [isLive, liveAsset, activeExpiry, price, mockAsset])
+    if (!isLive || !activeExpiry) return []
+    return buildLiveChain(liveAsset!.contracts, activeExpiry, price)
+  }, [isLive, liveAsset, activeExpiry, price])
 
+  // ── No options available for this asset ─────────────────────────────
+  if (!hasOptions) {
+    return <NoOptionsState symbol={selectedAsset} price={price} />
+  }
+
+  // ── Options chain (BTC / ETH live) ────────────────────────────────────
   return (
     <div className="space-y-3">
-      {/* Live/mock status + asset price */}
+      {/* Status bar */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className={`text-[10px] px-2.5 py-1 rounded-full font-semibold ${
-            isLive
-              ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-700/30'
-              : 'bg-amber-900/40 text-amber-500 border border-amber-700/30'
-          }`}>
-            {isLive ? '● Live' : '◎ Simulated'} · {selectedAsset.replace('USDT', '')}
-          </span>
-          {!isLive && (
-            <span className="text-[10px] text-slate-600">Options only on BTC & ETH</span>
-          )}
-        </div>
+        <span className={`text-[10px] px-2.5 py-1 rounded-full font-semibold ${
+          isLive
+            ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-700/30'
+            : 'bg-indigo-900/50 text-indigo-400 border border-indigo-700/30'
+        }`}>
+          {isLive ? '● Live Binance Options' : '◌ Connecting…'} · {selectedAsset.replace('USDT', '')}
+        </span>
         <span className="text-xs font-mono font-semibold text-indigo-300">{fmtPrice(price)}</span>
       </div>
 
       {/* Expiry pills */}
-      <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-        {expiryDates.map(e => (
-          <button key={e} onClick={() => setExpiry(e)}
-            className={`flex-shrink-0 text-[11px] px-3 py-1.5 rounded-full font-medium transition-all ${
-              activeExpiry === e ? 'tab-active text-white' : 'bg-[#1a1a3a] text-slate-400 border border-[#1e1e3f]'
-            }`}>
-            {e.slice(5)}
-          </button>
-        ))}
-      </div>
+      {expiryDates.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          {expiryDates.map(e => (
+            <button key={e} onClick={() => setExpiry(e)}
+              className={`flex-shrink-0 text-[11px] px-3 py-1.5 rounded-full font-medium transition-all ${
+                activeExpiry === e ? 'tab-active text-white' : 'bg-[#1a1a3a] text-slate-400 border border-[#1e1e3f]'
+              }`}>
+              {e.slice(5)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Calls / Puts tabs */}
       <div className="flex gap-1 bg-[#0d0d20] rounded-xl p-1 border border-[#1e1e3f]">
@@ -278,25 +314,38 @@ export function OptionChainView({ selectedAsset }: Props) {
           { color: 'text-emerald-400', label: 'Δ Delta' },
           { color: 'text-red-400',     label: 'θ Theta' },
           { color: 'text-violet-400',  label: 'ν Vega' },
-          { color: 'text-slate-400',   label: 'Γ Gamma' },
-          { color: 'text-slate-400',   label: 'Vol / OI' },
+          { color: 'text-slate-400',   label: 'Γ' },
+          { color: 'text-slate-400',   label: 'Vol/OI' },
         ].map(l => (
           <span key={l.label} className={`text-[10px] ${l.color}`}>{l.label}</span>
         ))}
         <span className="text-[10px] text-slate-600 ml-auto">← scroll →</span>
       </div>
 
-      {/* Animated table swap */}
+      {/* Table or loading/empty */}
       <AnimatePresence mode="wait">
-        <motion.div
-          key={side + activeExpiry}
-          initial={{ opacity: 0, x: side === 'call' ? -12 : 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: side === 'call' ? 12 : -12 }}
-          transition={{ duration: 0.18 }}
-        >
-          <ChainTable rows={chain} side={side} price={price} />
-        </motion.div>
+        {!isLive ? (
+          <motion.div key="loading"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="rounded-2xl border border-[#1e1e3f] bg-[#0d0d20] py-12 text-center">
+            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-slate-500">Loading live contracts…</p>
+          </motion.div>
+        ) : chain.length === 0 ? (
+          <motion.div key="empty"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="rounded-2xl border border-[#1e1e3f] bg-[#0d0d20] py-10 text-center">
+            <p className="text-sm text-slate-500">No contracts for this expiry</p>
+          </motion.div>
+        ) : (
+          <motion.div key={side + activeExpiry}
+            initial={{ opacity: 0, x: side === 'call' ? -10 : 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{    opacity: 0, x: side === 'call' ? 10 : -10 }}
+            transition={{ duration: 0.16 }}>
+            <ChainTable rows={chain} side={side} price={price} />
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   )
