@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/proxy.js": {
+      "regions": ["sin1"]
+    }
+  },
   "routes": [
     {
       "src": "/eapi/v1/(.*)",
