@@ -1,7 +1,9 @@
 // Client-side HMAC-SHA256 signing via Web Crypto API.
 // API key + secret live in localStorage only — never sent to any server.
-// All requests route through the /eapi Vite/Vercel proxy which forwards
-// headers (including X-MBX-APIKEY) intact to eapi.binance.com.
+// In production, calls go to /api/eapi (Vercel serverless function → eapi.binance.com).
+// In dev, calls go to /eapi (Vite proxy → eapi.binance.com).
+
+const EAPI_BASE = import.meta.env.PROD ? '/api/eapi/v1' : '/eapi/v1'
 
 const LS_KEY   = 'ochain_api_key'
 const LS_SEC   = 'ochain_api_secret'
@@ -58,7 +60,7 @@ export async function signedGet<T>(
   }).toString()
 
   const signature = await hmacSha256(creds.apiSecret, qs)
-  const url       = `/eapi/v1${path}?${qs}&signature=${signature}`
+  const url       = `${EAPI_BASE}${path}?${qs}&signature=${signature}`
 
   const res = await fetch(url, {
     headers: { 'X-MBX-APIKEY': creds.apiKey },
@@ -87,7 +89,7 @@ export async function signedPost<T>(
   const signature = await hmacSha256(creds.apiSecret, body.toString())
   body.append('signature', signature)
 
-  const res = await fetch(`/eapi/v1${path}`, {
+  const res = await fetch(`${EAPI_BASE}${path}`, {
     method: 'POST',
     headers: {
       'X-MBX-APIKEY': creds.apiKey,
@@ -117,7 +119,7 @@ export async function signedDelete<T>(
   }).toString()
 
   const signature = await hmacSha256(creds.apiSecret, qs)
-  const url       = `/eapi/v1${path}?${qs}&signature=${signature}`
+  const url       = `${EAPI_BASE}${path}?${qs}&signature=${signature}`
 
   const res = await fetch(url, {
     method: 'DELETE',

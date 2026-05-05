@@ -1,9 +1,11 @@
 // Binance data layer
 // Spot prices:   https://api.binance.com  (CORS: *)
-// Options data:  /eapi proxy → https://eapi.binance.com  (no CORS header)
+// Options data:  proxied through /api/eapi (prod) or /eapi (dev Vite proxy)
 
 const SPOT_BASE    = 'https://api.binance.com'
-const OPTIONS_BASE = '/eapi/v1'
+// In production Vercel calls go directly to the serverless function at /api/eapi.
+// In dev the Vite proxy handles /eapi → eapi.binance.com.
+const OPTIONS_BASE = import.meta.env.PROD ? '/api/eapi/v1' : '/eapi/v1'
 
 // Assets we show in the UI
 export const SPOT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT']
