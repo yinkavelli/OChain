@@ -1,11 +1,20 @@
 // Binance data layer
-// Spot prices:   https://api.binance.com  (CORS: *)
-// Options data:  proxied through /api/eapi (prod) or /eapi (dev Vite proxy)
+// Spot prices: https://api.binance.com (CORS *)
+// Options:     dev  → Vite proxy /eapi/v1/... → eapi.binance.com
+//              prod → /api/proxy?p=v1/... (Vercel function signs with env vars)
 
-const SPOT_BASE    = 'https://api.binance.com'
-// In production Vercel calls go directly to the serverless function at /api/eapi.
-// In dev the Vite proxy handles /eapi → eapi.binance.com.
-const OPTIONS_BASE = import.meta.env.PROD ? '/api/eapi/v1' : '/eapi/v1'
+const SPOT_BASE = 'https://api.binance.com'
+const IS_PROD   = import.meta.env.PROD
+
+// Build a URL for an options endpoint — handles dev vs prod routing
+function optionsUrl(apiPath: string, params: Record<string, string> = {}): string {
+  if (IS_PROD) {
+    const qs = new URLSearchParams({ p: `v1${apiPath}`, ...params }).toString()
+    return `/api/proxy?${qs}`
+  }
+  const qs = new URLSearchParams(params).toString()
+  return `/eapi/v1${apiPath}${qs ? `?${qs}` : ''}`
+}
 
 // Assets we show in the UI
 export const SPOT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT']
@@ -27,8 +36,7 @@ async function spotGet<T>(path: string): Promise<T> {
 }
 
 async function optionsGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
-  const qs = new URLSearchParams(params).toString()
-  const res = await fetch(`${OPTIONS_BASE}${path}${qs ? `?${qs}` : ''}`)
+  const res = await fetch(optionsUrl(path, params))
   if (!res.ok) throw new Error(`Options API ${res.status}`)
   return res.json()
 }

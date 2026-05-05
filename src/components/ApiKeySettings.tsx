@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Eye, EyeOff, Check, Trash2, Shield, AlertTriangle, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Check, Trash2, Shield, AlertTriangle, Loader2, Server } from 'lucide-react'
 import { saveCredentials, clearCredentials, hasCredentials, loadCredentials } from '../lib/binanceAuth'
 import { fetchOptionAccount } from '../lib/binancePrivate'
+
+const IS_PROD = import.meta.env.PROD
 
 type TestStatus = 'idle' | 'testing' | 'ok' | 'fail'
 
@@ -50,6 +52,71 @@ export function ApiKeySettings({ onChange }: { onChange?: () => void }) {
     onChange?.()
   }
 
+
+  // Production: show Vercel env var instructions — no browser key entry needed
+  if (IS_PROD) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Server className="w-4 h-4 text-indigo-400" />
+          <p className="text-sm font-semibold text-white">Binance API Key</p>
+        </div>
+
+        <div className="rounded-xl bg-indigo-950/40 border border-indigo-800/30 p-4 space-y-2">
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Your API key is stored securely as a <span className="text-white font-medium">Vercel environment variable</span> — never in the browser. The server signs all requests before they reach Binance.
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-[#0d0d20] border border-[#1e1e3f] p-4 space-y-3">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">How to connect</p>
+          {[
+            { n: '1', text: 'Go to vercel.com → your OChain project → Settings → Environment Variables' },
+            { n: '2', text: 'Add BINANCE_API_KEY → paste your Binance API key' },
+            { n: '3', text: 'Add BINANCE_API_SECRET → paste your secret' },
+            { n: '4', text: 'Click Save, then Redeploy the project for changes to take effect' },
+          ].map(s => (
+            <div key={s.n} className="flex items-start gap-3 text-xs text-slate-400">
+              <span className="w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-400 font-bold text-[10px] flex items-center justify-center flex-shrink-0">{s.n}</span>
+              {s.text}
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-xl bg-amber-950/30 border border-amber-800/25 p-3">
+          <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1">Permissions</p>
+          <p className="text-xs text-slate-400">Enable <span className="text-white">Read Info</span> only. No IP restriction needed — the server IP is fixed.</p>
+        </div>
+
+        <button onClick={async () => {
+          setTest('testing')
+          try {
+            await fetchOptionAccount()
+            setTest('ok')
+            setTestMsg('Connected ✓  Environment variables are set correctly')
+          } catch (e) {
+            setTest('fail')
+            setTestMsg((e as Error).message)
+          }
+        }} disabled={testStatus === 'testing'}
+          className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
+          {testStatus === 'testing' ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing…</> : testStatus === 'ok' ? <><Check className="w-4 h-4" /> Verified</> : 'Test Connection'}
+        </button>
+
+        <AnimatePresence>
+          {testMsg && (
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className={`rounded-xl px-3 py-2.5 text-xs flex items-start gap-2 ${
+                testStatus === 'ok' ? 'bg-emerald-950/50 border border-emerald-800/40 text-emerald-300' : 'bg-red-950/50 border border-red-800/40 text-red-300'
+              }`}>
+              {testStatus === 'ok' ? <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />}
+              <span className="font-mono leading-relaxed">{testMsg}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">

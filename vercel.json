@@ -1,8 +1,8 @@
 {
-  "rewrites": [
+  "routes": [
     {
-      "source": "/eapi/:path*",
-      "destination": "/api/eapi/:path*"
+      "src": "/eapi/v1/(.*)",
+      "dest": "/api/proxy?p=v1/$1"
     }
   ]
 }
