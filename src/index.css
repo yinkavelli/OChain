@@ -89,7 +89,7 @@ body {
 }
 
 .animate-ticker {
-  animation: ticker 30s linear infinite;
+  animation: ticker 12s linear infinite;
 }
 
 .strategy-badge-covered-call { background: linear-gradient(135deg, #1e3a5f, #1e4d7b); border: 1px solid #2563eb; color: #93c5fd; }
