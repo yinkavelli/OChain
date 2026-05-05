@@ -1,18 +1,30 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchOptionAccount, fetchPositions, fetchOpenOrders,
-  placeOrder, cancelOrder,
+  fetchSpotAccount, placeOrder, cancelOrder,
 } from '../lib/binancePrivate'
 import type { PlaceOrderParams } from '../lib/binancePrivate'
 import { hasCredentials } from '../lib/binanceAuth'
 
+// Spot account — only needs Read Info, no IP restriction
+export function useSpotAccount() {
+  return useQuery({
+    queryKey: ['bn-spot-account'],
+    queryFn:  fetchSpotAccount,
+    enabled:  hasCredentials(),
+    refetchInterval: 30_000,
+    retry: 1,
+  })
+}
+
+// Options account — needs European Options Trading permission + static IP
 export function useAccount() {
   return useQuery({
     queryKey: ['bn-account'],
     queryFn:  fetchOptionAccount,
     enabled:  hasCredentials(),
     refetchInterval: 15_000,
-    retry: 1,
+    retry: 0,  // don't retry — if it fails it's a permissions issue
   })
 }
 

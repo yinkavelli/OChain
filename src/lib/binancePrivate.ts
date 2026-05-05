@@ -1,10 +1,29 @@
-import { signedGet, signedPost, signedDelete } from './binanceAuth'
+import { signedGet, signedPost, signedDelete, signedSpotGet } from './binanceAuth'
 
-// ── Account ───────────────────────────────────────────────────────────
+// ── Spot account (Read Info only, no IP restriction, api.binance.com) ─
+
+export interface SpotBalance {
+  asset: string
+  free: string
+  locked: string
+}
+
+export interface SpotAccount {
+  makerCommission: number
+  takerCommission: number
+  canTrade: boolean
+  balances: SpotBalance[]
+}
+
+export async function fetchSpotAccount(): Promise<SpotAccount> {
+  return signedSpotGet<SpotAccount>('/api/v3/account')
+}
+
+// ── Options account (requires European Options Trading permission + IP) ─
 
 export interface BnOptionAccount {
   asset: Array<{
-    asset: string          // e.g. "USDT"
+    asset: string
     marginBalance: string
     equity: string
     availableBalance: string

@@ -160,3 +160,39 @@ export async function signedDelete<T>(
   if (!res.ok) throw new Error(`Binance ${res.status}: ${await res.text()}`)
   return res.json()
 }
+
+// ── Signed Spot GET (api.binance.com — CORS OK, no proxy needed) ──────
+// Only requires "Read Info" permission, no IP restriction, no eapi.
+
+export async function signedSpotGet<T>(
+  path: string,
+  params: Record<string, string | number> = {},
+): Promise<T> {
+  // In production: route through proxy so server adds signing with env vars
+  if (IS_PROD) {
+    const qs = new URLSearchParams({
+      p: `spot${path}`,
+      ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
+    }).toString()
+    const res = await fetch(`/api/proxy?${qs}`)
+    if (!res.ok) throw new Error(`Binance ${res.status}: ${await res.text()}`)
+    return res.json()
+  }
+
+  // Dev: client-side signing direct to api.binance.com
+  const creds = loadCredentials()
+  if (!creds) throw new Error('No API credentials — add them in Settings')
+
+  const qs = new URLSearchParams({
+    ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
+    timestamp: Date.now().toString(),
+    recvWindow: '10000',
+  }).toString()
+  const signature = await hmacSha256(creds.apiSecret, qs)
+
+  const res = await fetch(`https://api.binance.com${path}?${qs}&signature=${signature}`, {
+    headers: { 'X-MBX-APIKEY': creds.apiKey },
+  })
+  if (!res.ok) throw new Error(`Binance ${res.status}: ${await res.text()}`)
+  return res.json()
+}

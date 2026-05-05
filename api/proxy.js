@@ -60,7 +60,13 @@ export default async function handler(req, res) {
     qs = url.searchParams.toString()
   }
 
-  const upstream = `https://eapi.binance.com/eapi/${epath}${qs ? '?' + qs : ''}`
+  // Spot paths are prefixed with "spot" — route to api.binance.com instead
+  let upstream
+  if (epath.startsWith('spot/')) {
+    upstream = `https://api.binance.com/${epath.slice(5)}${qs ? '?' + qs : ''}`
+  } else {
+    upstream = `https://eapi.binance.com/eapi/${epath}${qs ? '?' + qs : ''}`
+  }
 
   try {
     const response = await fetch(upstream, {
