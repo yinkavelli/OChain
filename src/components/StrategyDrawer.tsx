@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, ChevronRight, TrendingUp, TrendingDown, Minus, Lightbulb, CheckCircle2, AlertTriangle } from 'lucide-react'
 import type { Strategy } from '../data/mockData'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { TradeModal } from './TradeModal'
+import { hasCredentials } from '../lib/binanceAuth'
 
 interface Props {
   strategy: Strategy | null
@@ -183,10 +186,14 @@ function buildRationale(s: Strategy): Rationale {
 }
 
 export function StrategyDrawer({ strategy: s, onClose }: Props) {
+  const [tradeOpen, setTradeOpen] = useState(false)
   const payoff = s ? buildPayoffData(s) : []
   const hasPositive = payoff.some(d => d.pnl > 0)
+  const hasCreds = hasCredentials()
+  const isTradeable = s && (s.symbol === 'BTCUSDT' || s.symbol === 'ETHUSDT')
 
   return (
+    <>
     <AnimatePresence>
       {s && (
         <>
@@ -387,8 +394,20 @@ export function StrategyDrawer({ strategy: s, onClose }: Props) {
                 })()}
 
                 {/* CTA */}
-                <button className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-base shadow-glow hover:from-indigo-500 hover:to-violet-500 transition-all active:scale-95">
-                  Open on Binance →
+                <button
+                  onClick={() => setTradeOpen(true)}
+                  className={`w-full py-4 rounded-2xl font-semibold text-base transition-all active:scale-95 ${
+                    isTradeable && hasCreds
+                      ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-glow hover:from-indigo-500 hover:to-violet-500'
+                      : isTradeable
+                      ? 'bg-gradient-to-r from-indigo-700/60 to-violet-700/60 text-indigo-200 border border-indigo-600/40'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700/40'
+                  }`}>
+                  {isTradeable && hasCreds
+                    ? 'Trade this strategy →'
+                    : isTradeable
+                    ? 'Connect API key to trade →'
+                    : 'View on Binance →'}
                 </button>
               </div>
             </div>
@@ -396,5 +415,7 @@ export function StrategyDrawer({ strategy: s, onClose }: Props) {
         </>
       )}
     </AnimatePresence>
+    <TradeModal strategy={tradeOpen ? s : null} onClose={() => setTradeOpen(false)} />
+    </>
   )
 }

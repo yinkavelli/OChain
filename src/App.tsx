@@ -11,7 +11,8 @@ import { FilterBar } from './components/FilterBar'
 import { IVChart } from './components/IVChart'
 import { BottomNav } from './components/BottomNav'
 import { OptionChainView } from './components/OptionChainView'
-import { AlertsView } from './components/AlertsView'
+import { PortfolioView } from './components/PortfolioView'
+import { ApiKeySettings } from './components/ApiKeySettings'
 
 import { STRATEGIES } from './data/mockData'
 import type { Strategy, StrategyType } from './data/mockData'
@@ -189,42 +190,52 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'alerts' && (
-            <motion.div key="alerts"
+          {activeTab === 'portfolio' && (
+            <motion.div key="portfolio"
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <AlertsView />
+              <PortfolioView />
             </motion.div>
           )}
 
           {activeTab === 'settings' && (
             <motion.div key="settings"
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              className="space-y-4">
+              className="space-y-5">
               <div>
                 <h2 className="text-lg font-bold text-white mb-0.5">Settings</h2>
-                <p className="text-xs text-slate-500">Preferences & configuration</p>
+                <p className="text-xs text-slate-500">Account & preferences</p>
               </div>
-              {[
-                { label: 'Notifications', sub: 'Push alerts for high PoP setups', on: true },
-                { label: 'IV Rank Threshold', sub: 'Alert when IV Rank > 70', on: true },
-                { label: 'Auto-Refresh', sub: 'Refresh data every 30 seconds', on: false },
-                { label: 'Sound Alerts', sub: 'Play sound on critical signals', on: false },
-              ].map((s, i) => (
-                <motion.div key={s.label}
-                  initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
-                  className="gradient-card rounded-2xl p-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-white">{s.label}</div>
-                    <div className="text-xs text-slate-500">{s.sub}</div>
-                  </div>
-                  <div className={`w-11 h-6 rounded-full cursor-pointer relative ${s.on ? 'bg-indigo-600' : 'bg-slate-700'}`}>
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${s.on ? 'left-6' : 'left-1'}`} />
-                  </div>
-                </motion.div>
-              ))}
+
+              {/* API Key section */}
+              <div className="gradient-card rounded-2xl p-4">
+                <ApiKeySettings onChange={() => {/* triggers re-render */}} />
+              </div>
+
+              {/* App preferences */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">Preferences</p>
+                {[
+                  { label: 'Auto-Refresh', sub: 'Refresh market data every 30s', on: true },
+                  { label: 'IV Rank Alerts', sub: 'Notify when IVR > 70', on: true },
+                  { label: 'Sound Alerts', sub: 'Play sound on signals', on: false },
+                ].map((s, i) => (
+                  <motion.div key={s.label}
+                    initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+                    className="gradient-card rounded-2xl p-4 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-white">{s.label}</div>
+                      <div className="text-xs text-slate-500">{s.sub}</div>
+                    </div>
+                    <div className={`w-11 h-6 rounded-full cursor-pointer relative ${s.on ? 'bg-indigo-600' : 'bg-slate-700'}`}>
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${s.on ? 'left-6' : 'left-1'}`} />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
               <div className="gradient-card rounded-2xl p-4">
                 <div className="text-sm font-medium text-white mb-1">Version</div>
-                <div className="text-xs text-indigo-400 font-mono">OChain v1.0.0 · Binance Options API</div>
+                <div className="text-xs text-indigo-400 font-mono">OChain v1.1.0 · Binance Options API</div>
               </div>
             </motion.div>
           )}
