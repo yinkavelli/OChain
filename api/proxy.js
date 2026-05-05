@@ -1,34 +1,40 @@
-// Single proxy function for eapi.binance.com
-// API key + secret are read from Vercel environment variables (server-side only).
-// Client sends bare requests — this function adds auth and signs before forwarding.
 import crypto from 'crypto'
 
 function sign(secret, message) {
   return crypto.createHmac('sha256', secret).update(message).digest('hex')
 }
 
-const PRIVATE = new Set(['account', 'position', 'openOrders', 'historyOrders', 'order', 'userTrades'])
+const PRIVATE = new Set([
+  'account', 'position', 'openOrders', 'historyOrders', 'order', 'userTrades',
+])
 
 function needsSigning(epath) {
-  return PRIVATE.has(epath.split('/').pop().split('?')[0])
+  const last = epath.split('/').pop()?.split('?')[0] ?? ''
+  return PRIVATE.has(last)
 }
 
 export default async function handler(req, res) {
-  // Path comes as ?p=v1/account (query param avoids catch-all routing issues)
-  const url     = new URL(req.url, 'http://localhost')
-  const epath   = url.searchParams.get('p') || ''
+  const url    = new URL(req.url, 'http://localhost')
+  const epath  = url.searchParams.get('p') || ''
   url.searchParams.delete('p')
 
-  const apiKey    = process.env.BINANCE_API_KEY
-  const apiSecret = process.env.BINANCE_API_SECRET
+  // Trim to remove any accidental whitespace/newlines from copy-paste
+  const apiKey    = (process.env.BINANCE_API_KEY    || '').trim()
+  const apiSecret = (process.env.BINANCE_API_SECRET || '').trim()
+
+  if (!apiKey || !apiSecret) {
+    return res.status(500).json({
+      error: 'Missing Binance credentials',
+      hint: 'Add BINANCE_API_KEY and BINANCE_API_SECRET in Vercel project settings → Environment Variables, then redeploy.',
+    })
+  }
 
   const headers = { 'User-Agent': 'OChain/1.1' }
   let body, qs
 
-  const isPrivate  = needsSigning(epath)
-  const hasEnvCreds = apiKey && apiSecret
+  const isPrivate = needsSigning(epath)
 
-  if (isPrivate && hasEnvCreds) {
+  if (isPrivate) {
     headers['X-MBX-APIKEY'] = apiKey
 
     if (req.method === 'GET' || req.method === 'DELETE') {
@@ -38,7 +44,6 @@ export default async function handler(req, res) {
       url.searchParams.set('signature', sign(apiSecret, qStr))
       qs = url.searchParams.toString()
     } else {
-      // POST — body is form-encoded
       const form = new URLSearchParams()
       const raw  = req.body
       if (raw && typeof raw === 'object') {
@@ -52,7 +57,6 @@ export default async function handler(req, res) {
       qs = ''
     }
   } else {
-    // Public endpoint — just proxy as-is
     qs = url.searchParams.toString()
   }
 
@@ -60,16 +64,42 @@ export default async function handler(req, res) {
 
   try {
     const response = await fetch(upstream, {
-      method:  req.method || 'GET',
+      method:   req.method || 'GET',
       headers,
+      redirect: 'manual',   // never follow redirects — return real Binance errors
       ...(body ? { body } : {}),
     })
+
+    // Binance redirects invalid/rejected requests to www.binance.com/en/error
+    // Intercept this and return a meaningful error instead of raw HTML
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location') || ''
+      const isOptionsBlock = location.includes('binance.com')
+      return res.status(403).json({
+        error: isOptionsBlock
+          ? 'Binance rejected the request — check API key permissions'
+          : `Redirect to ${location}`,
+        hint: 'In Binance → API Management, enable "Enable European Options Trading". Even Read Info requests to /eapi require this permission.',
+        upstream,
+      })
+    }
+
     const text = await response.text()
+
+    // Try to surface clean JSON errors from Binance instead of raw HTML
+    let parsed
+    try { parsed = JSON.parse(text) } catch { /* not JSON */ }
+
+    if (!response.ok && parsed?.msg) {
+      return res.status(response.status).json({ error: parsed.msg, code: parsed.code })
+    }
+
     res
       .status(response.status)
       .setHeader('Content-Type', response.headers.get('content-type') || 'application/json')
       .setHeader('Access-Control-Allow-Origin', '*')
       .send(text)
+
   } catch (err) {
     res.status(502).json({ error: 'Proxy error', message: err.message })
   }
