@@ -51,9 +51,9 @@ function NoCredentials() {
       <div className="rounded-xl bg-amber-950/40 border border-amber-800/30 p-3 text-left">
         <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1">Permissions needed</p>
         <ul className="text-xs text-slate-300 space-y-1">
-          <li>• <span className="text-white">Read Info</span> — for positions & balance</li>
-          <li>• <span className="text-white">Enable Options</span> — for trade execution</li>
-          <li>• <span className="text-slate-500">IP restriction recommended for security</span></li>
+          <li>• <span className="text-white">Read Info</span> — required for positions & balance</li>
+          <li>• No withdrawals, no trading permissions needed</li>
+          <li>• <span className="text-slate-500">Do not set IP restrictions — your device IP changes across networks</span></li>
         </ul>
       </div>
     </motion.div>

@@ -68,9 +68,18 @@ export function ApiKeySettings({ onChange }: { onChange?: () => void }) {
       {/* Security notice */}
       <div className="rounded-xl bg-indigo-950/40 border border-indigo-800/30 p-3 flex gap-2">
         <Shield className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+        <div className="text-[10px] text-slate-400 leading-relaxed space-y-1.5">
+          <p>Your keys are stored in <span className="text-white">localStorage</span> on this device and sent <span className="text-white">directly to Binance</span> over HTTPS — OChain never sees them.</p>
+          <p className="text-amber-300/90">Use a <span className="text-white">Read Info only</span> key. Do not enable withdrawals or trading permissions — this keeps your funds safe even if the key is ever exposed.</p>
+        </div>
+      </div>
+
+      {/* IP restriction explanation */}
+      <div className="rounded-xl bg-amber-950/30 border border-amber-800/25 p-3 flex gap-2">
+        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
         <div className="text-[10px] text-slate-400 leading-relaxed space-y-1">
-          <p>Your keys are stored in <span className="text-white">localStorage</span> and sent <span className="text-white">directly to Binance</span> — never to any third-party server.</p>
-          <p>Use a <span className="text-amber-300">read-only key</span> for portfolio viewing, or enable <span className="text-amber-300">Options trading</span> for execution. Always set <span className="text-amber-300">IP restrictions</span> in Binance key settings.</p>
+          <p className="font-semibold text-amber-400">Don't set IP restrictions for this app</p>
+          <p>IP restriction only works when calls come from a fixed server. OChain calls Binance directly from your device — your IP changes between mobile data, home WiFi, and other networks. Whitelisting one IP would lock you out on all others. <span className="text-white">Limiting key permissions to Read Info is sufficient protection.</span></p>
         </div>
       </div>
 
@@ -151,15 +160,15 @@ export function ApiKeySettings({ onChange }: { onChange?: () => void }) {
       <div className="rounded-xl bg-slate-800/30 border border-slate-700/30 p-3 space-y-1.5">
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">How to create a key</p>
         {[
-          'Log into Binance → Profile → API Management',
-          'Create API → choose "System generated"',
-          'Enable: Read Info + European Options Trading',
-          'Restrict to your IP address for security',
-          'Copy key + secret here',
+          { text: 'Binance app or web → Profile → API Management', warn: false },
+          { text: 'Create API → "System generated"', warn: false },
+          { text: 'Enable Read Info only — do NOT enable trading or withdrawals', warn: true },
+          { text: 'Leave IP restriction OFF — your device IP changes constantly', warn: true },
+          { text: 'Copy API key + secret and paste above', warn: false },
         ].map((step, i) => (
-          <div key={i} className="flex items-start gap-2 text-[10px] text-slate-400">
+          <div key={i} className="flex items-start gap-2 text-[10px]">
             <span className="text-indigo-500 flex-shrink-0 font-bold">{i + 1}.</span>
-            {step}
+            <span className={step.warn ? 'text-amber-400' : 'text-slate-400'}>{step.text}</span>
           </div>
         ))}
       </div>

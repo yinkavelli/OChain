@@ -20,7 +20,8 @@
       "Bash(vercel --version)",
       "Bash(git commit -m 'Add Vercel rewrite for eapi proxy *)",
       "Bash(git push *)",
-      "Bash(vercel deploy *)"
+      "Bash(vercel deploy *)",
+      "Bash(git commit -m 'Fix misleading IP restriction advice for client-side app *)"
     ]
   }
 }
