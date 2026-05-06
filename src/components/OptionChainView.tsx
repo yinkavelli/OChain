@@ -34,33 +34,39 @@ interface ColDef {
 }
 
 const CALL_COLS: ColDef[] = [
-  { key: 'bid',   label: 'Bid',    sub: '',          align: 'left',  width: 72,  render: (r) => <span className="text-emerald-400 font-semibold font-mono">{fmtPrice(r.call.bid)}</span> },
-  { key: 'ask',   label: 'Ask',    sub: '',          align: 'left',  width: 72,  render: (r) => <span className="text-slate-300 font-mono">{fmtPrice(r.call.ask)}</span> },
-  { key: 'iv',    label: 'IV',     sub: '%',         align: 'left',  width: 52,  render: (r) => <span className="text-indigo-300">{r.call.iv > 0 ? r.call.iv.toFixed(1) + '%' : '—'}</span> },
-  { key: 'delta', label: 'Δ Delta',sub: '',          align: 'left',  width: 56,  render: (r) => <span className="text-emerald-400">{fmtNum(r.call.delta, 3)}</span> },
-  { key: 'theta', label: 'θ Theta',sub: '/day',      align: 'left',  width: 60,  render: (r) => <span className="text-red-400">{fmtNum(r.call.theta, 2)}</span> },
-  { key: 'gamma', label: 'Γ',      sub: 'gamma',     align: 'left',  width: 52,  render: (r) => <span className="text-slate-400">{fmtNum(r.call.gamma, 4)}</span> },
-  { key: 'vega',  label: 'ν Vega', sub: '',          align: 'left',  width: 56,  render: (r) => <span className="text-violet-400">{fmtNum(r.call.vega, 1)}</span> },
-  { key: 'vol',   label: 'Vol',    sub: 'volume',    align: 'left',  width: 52,  render: (r) => <span className="text-slate-400">{fmtVol(r.call.volume)}</span> },
-  { key: 'oi',    label: 'OI',     sub: 'open int',  align: 'left',  width: 56,  render: (r) => <span className="text-slate-400">{fmtVol(r.call.oi)}</span> },
+  { key: 'bid',   label: 'Bid',     sub: 'IV',   align: 'left', width: 80,
+    render: (r) => <div><div className="text-emerald-400 font-semibold font-mono">{fmtPrice(r.call.bid)}</div><div className="text-[9px] text-slate-500">{r.call.bidIV > 0 ? r.call.bidIV.toFixed(2) + '%' : '—'}</div></div> },
+  { key: 'ask',   label: 'Ask',     sub: 'IV',   align: 'left', width: 80,
+    render: (r) => <div><div className="text-slate-300 font-mono">{fmtPrice(r.call.ask)}</div><div className="text-[9px] text-slate-500">{r.call.askIV > 0 ? r.call.askIV.toFixed(2) + '%' : '—'}</div></div> },
+  { key: 'mark',  label: 'Mark',    sub: 'IV',   align: 'left', width: 80,
+    render: (r) => <div><div className="text-indigo-300 font-mono">{fmtPrice(r.call.markPrice)}</div><div className="text-[9px] text-indigo-500">{r.call.iv > 0 ? r.call.iv.toFixed(1) + '%' : '—'}</div></div> },
+  { key: 'delta', label: 'Δ Delta', sub: '',      align: 'left', width: 56,  render: (r) => <span className="text-emerald-400">{fmtNum(r.call.delta, 3)}</span> },
+  { key: 'theta', label: 'θ',       sub: '/day',  align: 'left', width: 52,  render: (r) => <span className="text-red-400">{fmtNum(r.call.theta, 2)}</span> },
+  { key: 'gamma', label: 'Γ',       sub: 'gamma', align: 'left', width: 52,  render: (r) => <span className="text-slate-400">{fmtNum(r.call.gamma, 4)}</span> },
+  { key: 'vega',  label: 'ν Vega',  sub: '',      align: 'left', width: 56,  render: (r) => <span className="text-violet-400">{fmtNum(r.call.vega, 1)}</span> },
+  { key: 'vol',   label: 'Vol',     sub: '',      align: 'left', width: 52,  render: (r) => <span className="text-slate-400">{fmtVol(r.call.volume)}</span> },
+  { key: 'oi',    label: 'OI',      sub: '',      align: 'left', width: 60,  render: (r) => <span className="text-slate-400">{fmtVol(r.call.oi)}</span> },
 ]
 
 const PUT_COLS: ColDef[] = [
-  { key: 'bid',   label: 'Bid',    sub: '',          align: 'left',  width: 72,  render: (r) => <span className="text-red-400 font-semibold font-mono">{fmtPrice(r.put.bid)}</span> },
-  { key: 'ask',   label: 'Ask',    sub: '',          align: 'left',  width: 72,  render: (r) => <span className="text-slate-300 font-mono">{fmtPrice(r.put.ask)}</span> },
-  { key: 'iv',    label: 'IV',     sub: '%',         align: 'left',  width: 52,  render: (r) => <span className="text-indigo-300">{r.put.iv > 0 ? r.put.iv.toFixed(1) + '%' : '—'}</span> },
-  { key: 'delta', label: 'Δ Delta',sub: '',          align: 'left',  width: 56,  render: (r) => <span className="text-red-400">{fmtNum(r.put.delta, 3)}</span> },
-  { key: 'theta', label: 'θ Theta',sub: '/day',      align: 'left',  width: 60,  render: (r) => <span className="text-red-400">{fmtNum(r.put.theta, 2)}</span> },
-  { key: 'gamma', label: 'Γ',      sub: 'gamma',     align: 'left',  width: 52,  render: (r) => <span className="text-slate-400">{fmtNum(r.put.gamma, 4)}</span> },
-  { key: 'vega',  label: 'ν Vega', sub: '',          align: 'left',  width: 56,  render: (r) => <span className="text-violet-400">{fmtNum(r.put.vega, 1)}</span> },
-  { key: 'vol',   label: 'Vol',    sub: 'volume',    align: 'left',  width: 52,  render: (r) => <span className="text-slate-400">{fmtVol(r.put.volume)}</span> },
-  { key: 'oi',    label: 'OI',     sub: 'open int',  align: 'left',  width: 56,  render: (r) => <span className="text-slate-400">{fmtVol(r.put.oi)}</span> },
+  { key: 'bid',   label: 'Bid',     sub: 'IV',   align: 'left', width: 80,
+    render: (r) => <div><div className="text-red-400 font-semibold font-mono">{fmtPrice(r.put.bid)}</div><div className="text-[9px] text-slate-500">{r.put.bidIV > 0 ? r.put.bidIV.toFixed(2) + '%' : '—'}</div></div> },
+  { key: 'ask',   label: 'Ask',     sub: 'IV',   align: 'left', width: 80,
+    render: (r) => <div><div className="text-slate-300 font-mono">{fmtPrice(r.put.ask)}</div><div className="text-[9px] text-slate-500">{r.put.askIV > 0 ? r.put.askIV.toFixed(2) + '%' : '—'}</div></div> },
+  { key: 'mark',  label: 'Mark',    sub: 'IV',   align: 'left', width: 80,
+    render: (r) => <div><div className="text-indigo-300 font-mono">{fmtPrice(r.put.markPrice)}</div><div className="text-[9px] text-indigo-500">{r.put.iv > 0 ? r.put.iv.toFixed(1) + '%' : '—'}</div></div> },
+  { key: 'delta', label: 'Δ Delta', sub: '',      align: 'left', width: 56,  render: (r) => <span className="text-red-400">{fmtNum(r.put.delta, 3)}</span> },
+  { key: 'theta', label: 'θ',       sub: '/day',  align: 'left', width: 52,  render: (r) => <span className="text-red-400">{fmtNum(r.put.theta, 2)}</span> },
+  { key: 'gamma', label: 'Γ',       sub: 'gamma', align: 'left', width: 52,  render: (r) => <span className="text-slate-400">{fmtNum(r.put.gamma, 4)}</span> },
+  { key: 'vega',  label: 'ν Vega',  sub: '',      align: 'left', width: 56,  render: (r) => <span className="text-violet-400">{fmtNum(r.put.vega, 1)}</span> },
+  { key: 'vol',   label: 'Vol',     sub: '',      align: 'left', width: 52,  render: (r) => <span className="text-slate-400">{fmtVol(r.put.volume)}</span> },
+  { key: 'oi',    label: 'OI',      sub: '',      align: 'left', width: 60,  render: (r) => <span className="text-slate-400">{fmtVol(r.put.oi)}</span> },
 ]
 
 // ── Row types ─────────────────────────────────────────────────────────
 
 interface Side {
-  bid: number; ask: number; iv: number
+  bid: number; ask: number; iv: number; bidIV: number; askIV: number; markPrice: number
   delta: number; gamma: number; theta: number; vega: number
   volume: number; oi: number
 }
@@ -72,7 +78,7 @@ interface ChainRow {
   isATM: boolean
 }
 
-const EMPTY_SIDE: Side = { bid: 0, ask: 0, iv: 0, delta: 0, gamma: 0, theta: 0, vega: 0, volume: 0, oi: 0 }
+const EMPTY_SIDE: Side = { bid: 0, ask: 0, iv: 0, bidIV: 0, askIV: 0, markPrice: 0, delta: 0, gamma: 0, theta: 0, vega: 0, volume: 0, oi: 0 }
 
 // ── Chain builders ────────────────────────────────────────────────────
 
@@ -88,12 +94,12 @@ function buildLiveChain(contracts: LiveContract[], expiry: string, price: number
     return {
       strike,
       call: call ? {
-        bid: call.bid, ask: call.ask, iv: call.iv,
+        bid: call.bid, ask: call.ask, iv: call.iv, bidIV: call.bidIV, askIV: call.askIV, markPrice: call.markPrice,
         delta: call.delta, gamma: call.gamma, theta: call.theta, vega: call.vega,
         volume: call.volume, oi: call.openInterest,
       } : EMPTY_SIDE,
       put: put ? {
-        bid: put.bid, ask: put.ask, iv: put.iv,
+        bid: put.bid, ask: put.ask, iv: put.iv, bidIV: put.bidIV, askIV: put.askIV, markPrice: put.markPrice,
         delta: put.delta, gamma: put.gamma, theta: put.theta, vega: put.vega,
         volume: put.volume, oi: put.openInterest,
       } : EMPTY_SIDE,

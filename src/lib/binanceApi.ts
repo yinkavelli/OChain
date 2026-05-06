@@ -192,12 +192,41 @@ export async function fetchLiveData(): Promise<LiveAsset[]> {
   })
 }
 
+interface BnOpenInterest {
+  symbol: string
+  sumOpenInterest: string
+  sumOpenInterestUsd: string
+}
+
 async function fetchOptionsData(): Promise<{ contracts: LiveContract[] }> {
   const [info, tickers, marks] = await Promise.all([
     optionsGet<BnExchangeInfo>('/exchangeInfo'),
     optionsGet<BnTicker[]>('/ticker'),
     optionsGet<BnMark[]>('/mark'),
   ])
+
+  // Fetch OI for each underlying+expiry combo in parallel (non-fatal)
+  const oiMap = new Map<string, number>()
+  try {
+    const expiries = [...new Set(
+      info.optionSymbols
+        .filter(s => OPTIONS_UNDERLYINGS.includes(s.underlying))
+        .map(s => ({ underlying: s.underlying.replace('USDT', ''), expiry: msToDateStr(s.expiryDate).replace(/-/g, '').slice(2) }))
+    )]
+    const uniquePairs = [...new Map(expiries.map(e => [`${e.underlying}-${e.expiry}`, e])).values()]
+    const oiResults = await Promise.allSettled(
+      uniquePairs.map(({ underlying, expiry }) =>
+        optionsGet<BnOpenInterest[]>('/openInterest', { underlyingAsset: underlying, expiration: expiry })
+      )
+    )
+    for (const r of oiResults) {
+      if (r.status === 'fulfilled') {
+        for (const oi of r.value) {
+          oiMap.set(oi.symbol, parseFloat(oi.sumOpenInterest) || 0)
+        }
+      }
+    }
+  } catch { /* OI is non-fatal */ }
 
   const tickerMap = new Map(tickers.map(t => [t.symbol, t]))
   const markMap   = new Map(marks.map(m => [m.symbol, m]))
@@ -211,8 +240,8 @@ async function fetchOptionsData(): Promise<{ contracts: LiveContract[] }> {
       const dte    = daysUntil(expiry)
       if (dte < 0 || dte > 90) return null
 
-      const bid = parseFloat(t?.bidPrice ?? '0') || 0
-      const ask = parseFloat(t?.askPrice ?? '0') || 0
+      const bid       = parseFloat(t?.bidPrice ?? '0') || 0
+      const ask       = parseFloat(t?.askPrice ?? '0') || 0
       const markIvRaw = parseFloat(m?.markIV ?? '0')
 
       return {
@@ -225,18 +254,18 @@ async function fetchOptionsData(): Promise<{ contracts: LiveContract[] }> {
         type: s.side,
         bid,
         ask,
-        last: parseFloat(t?.lastPrice ?? '0') || 0,
-        markPrice: parseFloat(m?.markPrice ?? '0') || 0,
-        iv: markIvRaw > 0 ? +(markIvRaw * 100).toFixed(2) : 0,
+        last:      parseFloat(t?.lastPrice  ?? '0') || 0,
+        markPrice: parseFloat(m?.markPrice  ?? '0') || 0,
+        iv:    markIvRaw > 0 ? +(markIvRaw * 100).toFixed(2) : 0,
         bidIV: +(parseFloat(m?.bidIV ?? '0') * 100).toFixed(2),
         askIV: +(parseFloat(m?.askIV ?? '0') * 100).toFixed(2),
         delta: parseFloat(m?.delta ?? '0') || 0,
         gamma: parseFloat(m?.gamma ?? '0') || 0,
         theta: parseFloat(m?.theta ?? '0') || 0,
         vega:  parseFloat(m?.vega  ?? '0') || 0,
-        volume: parseFloat(t?.volume ?? '0') || 0,
-        openInterest: 0,
-        underlyingPrice: 0,  // filled in fetchLiveData after spot price is known
+        volume:       parseFloat(t?.volume ?? '0') || 0,
+        openInterest: oiMap.get(s.symbol) ?? 0,
+        underlyingPrice: 0,
       } satisfies LiveContract
     })
     .filter((c): c is LiveContract => c !== null && (c.bid > 0 || c.markPrice > 0))
