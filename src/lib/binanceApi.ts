@@ -126,7 +126,7 @@ export interface LiveAsset {
   iv30: number
   ivRank: number
   hv30: number
-  hasOptions: boolean       // only BTC + ETH
+  hasOptions: boolean
   contracts: LiveContract[]
   expiryDates: string[]
 }
