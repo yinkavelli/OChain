@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RefreshCw, TrendingUp, Activity, Zap, BarChart2, WifiOff, LogIn, LogOut } from 'lucide-react'
-import oChainLogo from '/OChain.png'
 import { useAuth } from './hooks/useAuth'
 import { LoginModal } from './components/LoginModal'
 
@@ -85,8 +84,15 @@ export default function App() {
       <header className="sticky top-0 z-20 border-b border-[#1e1e3f]"
         style={{ background: 'rgba(10,10,20,0.95)', backdropFilter: 'blur(20px)' }}>
         <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center">
-            <img src={oChainLogo} alt="OChain" className="h-10 w-auto drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center"
+              style={{ boxShadow: '0 0 16px rgba(99,102,241,0.4)' }}>
+              <Zap className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-white leading-tight">OChain</h1>
+              <p className="text-[9px] text-indigo-400 font-medium leading-tight">Options Intelligence</p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <div className="text-[10px] text-right">
