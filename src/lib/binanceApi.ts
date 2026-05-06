@@ -222,7 +222,8 @@ async function fetchOptionsData(): Promise<{ contracts: LiveContract[] }> {
     for (const r of oiResults) {
       if (r.status === 'fulfilled') {
         for (const oi of r.value) {
-          oiMap.set(oi.symbol, parseFloat(oi.sumOpenInterest) || 0)
+          // Use USD notional OI to match what Binance app displays
+          oiMap.set(oi.symbol, parseFloat(oi.sumOpenInterestUsd) || parseFloat(oi.sumOpenInterest) || 0)
         }
       }
     }

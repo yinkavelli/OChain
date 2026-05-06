@@ -21,6 +21,12 @@ function fmtVol(n: number) {
   if (n > 1000) return `${(n / 1000).toFixed(1)}k`
   return n.toFixed(0)
 }
+function fmtOI(n: number) {
+  if (!n || isNaN(n)) return '—'
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`
+  if (n >= 1_000)     return `$${(n / 1_000).toFixed(1)}k`
+  return `$${n.toFixed(0)}`
+}
 
 // ── Columns ───────────────────────────────────────────────────────────
 
@@ -45,7 +51,7 @@ const CALL_COLS: ColDef[] = [
   { key: 'gamma', label: 'Γ',       sub: 'gamma', align: 'left', width: 52,  render: (r) => <span className="text-slate-400">{fmtNum(r.call.gamma, 4)}</span> },
   { key: 'vega',  label: 'ν Vega',  sub: '',      align: 'left', width: 56,  render: (r) => <span className="text-violet-400">{fmtNum(r.call.vega, 1)}</span> },
   { key: 'vol',   label: 'Vol',     sub: '',      align: 'left', width: 52,  render: (r) => <span className="text-slate-400">{fmtVol(r.call.volume)}</span> },
-  { key: 'oi',    label: 'OI',      sub: '',      align: 'left', width: 60,  render: (r) => <span className="text-slate-400">{fmtVol(r.call.oi)}</span> },
+  { key: 'oi',    label: 'OI',      sub: '',      align: 'left', width: 60,  render: (r) => <span className="text-slate-400">{fmtOI(r.call.oi)}</span> },
 ]
 
 const PUT_COLS: ColDef[] = [
@@ -60,7 +66,7 @@ const PUT_COLS: ColDef[] = [
   { key: 'gamma', label: 'Γ',       sub: 'gamma', align: 'left', width: 52,  render: (r) => <span className="text-slate-400">{fmtNum(r.put.gamma, 4)}</span> },
   { key: 'vega',  label: 'ν Vega',  sub: '',      align: 'left', width: 56,  render: (r) => <span className="text-violet-400">{fmtNum(r.put.vega, 1)}</span> },
   { key: 'vol',   label: 'Vol',     sub: '',      align: 'left', width: 52,  render: (r) => <span className="text-slate-400">{fmtVol(r.put.volume)}</span> },
-  { key: 'oi',    label: 'OI',      sub: '',      align: 'left', width: 60,  render: (r) => <span className="text-slate-400">{fmtVol(r.put.oi)}</span> },
+  { key: 'oi',    label: 'OI',      sub: '',      align: 'left', width: 60,  render: (r) => <span className="text-slate-400">{fmtOI(r.put.oi)}</span> },
 ]
 
 // ── Row types ─────────────────────────────────────────────────────────
