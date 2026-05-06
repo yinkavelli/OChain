@@ -18,7 +18,7 @@ function optionsUrl(apiPath: string, params: Record<string, string> = {}): strin
 
 // Assets we show in the UI
 export const SPOT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT']
-export const OPTIONS_UNDERLYINGS = ['BTCUSDT', 'ETHUSDT']  // only BTC + ETH have Binance options
+export const OPTIONS_UNDERLYINGS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT']
 
 const ASSET_META: Record<string, { name: string }> = {
   BTCUSDT:  { name: 'Bitcoin'  },

@@ -184,8 +184,7 @@ function ChainTable({ rows, side }: { rows: ChainRow[]; side: 'call' | 'put'; pr
 
 interface Props { selectedAsset: string }
 
-// Assets that have options on Binance European Options
-const OPTIONS_ASSETS = new Set(['BTCUSDT', 'ETHUSDT'])
+const OPTIONS_ASSETS = new Set(['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT'])
 
 const NO_OPTIONS_INFO: Record<string, { venue: string; url: string }> = {
   BNBUSDT:  { venue: 'Binance options not available for BNB', url: 'https://www.binance.com/en/options' },
