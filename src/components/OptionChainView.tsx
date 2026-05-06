@@ -34,15 +34,15 @@ interface ColDef {
 }
 
 const CALL_COLS: ColDef[] = [
-  { key: 'oi',    label: 'OI',     sub: 'open int',  align: 'right', width: 56,  render: (r) => <span className="text-slate-400">{fmtVol(r.call.oi)}</span> },
-  { key: 'vol',   label: 'Vol',    sub: 'volume',    align: 'right', width: 52,  render: (r) => <span className="text-slate-400">{fmtVol(r.call.volume)}</span> },
-  { key: 'vega',  label: 'ν Vega', sub: '',          align: 'right', width: 56,  render: (r) => <span className="text-violet-400">{fmtNum(r.call.vega, 1)}</span> },
-  { key: 'gamma', label: 'Γ',      sub: 'gamma',     align: 'right', width: 52,  render: (r) => <span className="text-slate-400">{fmtNum(r.call.gamma, 4)}</span> },
-  { key: 'theta', label: 'θ Theta',sub: '/day',      align: 'right', width: 60,  render: (r) => <span className="text-red-400">{fmtNum(r.call.theta, 2)}</span> },
-  { key: 'delta', label: 'Δ Delta',sub: '',          align: 'right', width: 56,  render: (r) => <span className="text-emerald-400">{fmtNum(r.call.delta, 3)}</span> },
-  { key: 'iv',    label: 'IV',     sub: '%',         align: 'right', width: 52,  render: (r) => <span className="text-indigo-300">{r.call.iv > 0 ? r.call.iv.toFixed(1) + '%' : '—'}</span> },
-  { key: 'ask',   label: 'Ask',    sub: '',          align: 'right', width: 72,  render: (r) => <span className="text-slate-300 font-mono">{fmtPrice(r.call.ask)}</span> },
-  { key: 'bid',   label: 'Bid',    sub: '',          align: 'right', width: 72,  render: (r) => <span className="text-emerald-400 font-semibold font-mono">{fmtPrice(r.call.bid)}</span> },
+  { key: 'bid',   label: 'Bid',    sub: '',          align: 'left',  width: 72,  render: (r) => <span className="text-emerald-400 font-semibold font-mono">{fmtPrice(r.call.bid)}</span> },
+  { key: 'ask',   label: 'Ask',    sub: '',          align: 'left',  width: 72,  render: (r) => <span className="text-slate-300 font-mono">{fmtPrice(r.call.ask)}</span> },
+  { key: 'iv',    label: 'IV',     sub: '%',         align: 'left',  width: 52,  render: (r) => <span className="text-indigo-300">{r.call.iv > 0 ? r.call.iv.toFixed(1) + '%' : '—'}</span> },
+  { key: 'delta', label: 'Δ Delta',sub: '',          align: 'left',  width: 56,  render: (r) => <span className="text-emerald-400">{fmtNum(r.call.delta, 3)}</span> },
+  { key: 'theta', label: 'θ Theta',sub: '/day',      align: 'left',  width: 60,  render: (r) => <span className="text-red-400">{fmtNum(r.call.theta, 2)}</span> },
+  { key: 'gamma', label: 'Γ',      sub: 'gamma',     align: 'left',  width: 52,  render: (r) => <span className="text-slate-400">{fmtNum(r.call.gamma, 4)}</span> },
+  { key: 'vega',  label: 'ν Vega', sub: '',          align: 'left',  width: 56,  render: (r) => <span className="text-violet-400">{fmtNum(r.call.vega, 1)}</span> },
+  { key: 'vol',   label: 'Vol',    sub: 'volume',    align: 'left',  width: 52,  render: (r) => <span className="text-slate-400">{fmtVol(r.call.volume)}</span> },
+  { key: 'oi',    label: 'OI',     sub: 'open int',  align: 'left',  width: 56,  render: (r) => <span className="text-slate-400">{fmtVol(r.call.oi)}</span> },
 ]
 
 const PUT_COLS: ColDef[] = [
@@ -114,18 +114,12 @@ function ChainTable({ rows, side }: { rows: ChainRow[]; side: 'call' | 'put'; pr
       <div style={{ minWidth: totalW }}>
         {/* Header */}
         <div className="flex bg-[#0a0a18] border-b border-[#1e1e3f] sticky top-0 z-10">
-          {side === 'call' && cols.map(c => (
-            <div key={c.key} style={{ width: c.width, minWidth: c.width }} className="px-2 py-2 text-right">
-              <div className="text-[10px] font-semibold text-slate-400">{c.label}</div>
-              {c.sub && <div className="text-[9px] text-slate-600">{c.sub}</div>}
-            </div>
-          ))}
-          {/* Strike — always center */}
+          {/* Strike — always first */}
           <div style={{ width: 64, minWidth: 64 }} className="px-2 py-2 text-center bg-indigo-950/30">
             <div className="text-[10px] font-bold text-indigo-400">Strike</div>
             <div className="text-[9px] text-slate-600">price</div>
           </div>
-          {side === 'put' && cols.map(c => (
+          {cols.map(c => (
             <div key={c.key} style={{ width: c.width, minWidth: c.width }} className="px-2 py-2 text-left">
               <div className="text-[10px] font-semibold text-slate-400">{c.label}</div>
               {c.sub && <div className="text-[9px] text-slate-600">{c.sub}</div>}
@@ -144,13 +138,8 @@ function ChainTable({ rows, side }: { rows: ChainRow[]; side: 'call' | 'put'; pr
               row.isATM ? 'bg-indigo-950/25' : i % 2 === 0 ? 'bg-transparent' : 'bg-[#0d0d1e]/30'
             }`}
           >
-            {side === 'call' && cols.map(c => (
-              <div key={c.key} style={{ width: c.width, minWidth: c.width }} className="px-2 py-2.5 text-right text-xs">
-                {c.render(row, 'call')}
-              </div>
-            ))}
-            {/* Strike */}
-            <div style={{ width: 64, minWidth: 64 }} className={`px-2 py-2.5 text-center bg-indigo-950/20 border-x border-indigo-900/20`}>
+            {/* Strike — always first */}
+            <div style={{ width: 64, minWidth: 64 }} className="px-2 py-2.5 text-center bg-indigo-950/20 border-x border-indigo-900/20">
               <div className={`text-xs font-bold font-mono ${row.isATM ? 'text-indigo-300' : 'text-slate-200'}`}>
                 {fmtPrice(row.strike)}
               </div>
@@ -158,9 +147,9 @@ function ChainTable({ rows, side }: { rows: ChainRow[]; side: 'call' | 'put'; pr
                 <div className="text-[9px] bg-indigo-600/40 text-indigo-300 rounded px-1 mt-0.5 inline-block">ATM</div>
               )}
             </div>
-            {side === 'put' && cols.map(c => (
+            {cols.map(c => (
               <div key={c.key} style={{ width: c.width, minWidth: c.width }} className="px-2 py-2.5 text-left text-xs">
-                {c.render(row, 'put')}
+                {c.render(row, side)}
               </div>
             ))}
           </motion.div>
