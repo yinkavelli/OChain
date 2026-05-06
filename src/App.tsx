@@ -221,7 +221,7 @@ export default function App() {
           {activeTab === 'portfolio' && (
             <motion.div key="portfolio"
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <PortfolioView markPrices={markPrices} />
+              <PortfolioView markPrices={markPrices} spotPrices={Object.fromEntries(assets.map(a => [a.symbol.replace('USDT',''), a.price]))} />
             </motion.div>
           )}
 

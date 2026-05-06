@@ -28,7 +28,10 @@
       "mcp__supabase__get_project_url",
       "mcp__supabase__apply_migration",
       "Bash(npx skills *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "WebFetch(domain:github.com)",
+      "Read(//tmp/CryptOption/**)",
+      "Read(//c/tmp/CryptOption/**)"
     ],
     "additionalDirectories": [
       "c:\\Users\\aadegbola\\.claude\\projects\\c--Users-aadegbola-ClaudeCodeProjects-OChain\\memory"

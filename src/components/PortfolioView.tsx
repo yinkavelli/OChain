@@ -1,6 +1,6 @@
-import { motion } from 'framer-motion'
-import { LogIn, Clock, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { motion, AnimatePresence } from 'framer-motion'
+import { LogIn, Clock, TrendingUp, TrendingDown, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, ComposedChart, Line } from 'recharts'
 import { useAuth } from '../hooks/useAuth'
 import { useTrades, useCloseTrade } from '../hooks/useTrades'
 import { usePnlHistory, usePnlSnapshotter, calcUnrealisedPnl } from '../hooks/usePnL'
@@ -10,6 +10,7 @@ import type { Trade } from '../lib/supabase'
 
 interface Props {
   markPrices: Record<string, number>
+  spotPrices: Record<string, number>
 }
 
 function fmtUsd(n: number) {
@@ -25,6 +26,31 @@ function msToExpiry(ms: number) {
   const days = Math.round((ms - Date.now()) / 86_400_000)
   if (days <= 0) return 'Expired'
   return `${days}d`
+}
+
+function buildPayoff(trade: Trade, spotPrice: number) {
+  const { strike_price: K, entry_price: premium, side, option_side, asset } = trade
+  const mult = asset === 'BTC' ? 0.1 : 1
+  const dir  = side === 'BUY' ? 1 : -1
+
+  const low  = K * 0.7
+  const high = K * 1.35
+  const steps = 60
+  const step = (high - low) / steps
+
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const S = low + i * step
+    let intrinsic = 0
+    if (option_side === 'CALL') intrinsic = Math.max(0, S - K)
+    else                        intrinsic = Math.max(0, K - S)
+
+    const atExpiry = (intrinsic - (dir === 1 ? premium : -premium)) * mult * trade.quantity * dir
+    return {
+      price: +S.toFixed(0),
+      pnl:   +atExpiry.toFixed(2),
+      isSpot: Math.abs(S - spotPrice) < step * 0.6,
+    }
+  })
 }
 
 function SignInPrompt({ onLogin }: { onLogin: () => void }) {
@@ -48,7 +74,7 @@ function SignInPrompt({ onLogin }: { onLogin: () => void }) {
   )
 }
 
-export function PortfolioView({ markPrices }: Props) {
+export function PortfolioView({ markPrices, spotPrices }: Props) {
   const { user } = useAuth()
   const [showLogin, setLogin] = useState(false)
   const [tab, setTab] = useState<'open' | 'history'>('open')
@@ -167,8 +193,8 @@ export function PortfolioView({ markPrices }: Props) {
                     No open positions — book a trade from the Screener
                   </div>
                 ) : openTrades.map((t, i) => (
-                  <OpenPositionCard key={t.id} trade={t} markPrices={markPrices} index={i}
-                    onClose={closeTrade.mutate} />
+                  <OpenPositionCard key={t.id} trade={t} markPrices={markPrices}
+                    spotPrice={spotPrices[t.asset] ?? 0} index={i} onClose={closeTrade.mutate} />
                 ))}
               </div>
             )}
@@ -191,56 +217,189 @@ export function PortfolioView({ markPrices }: Props) {
   )
 }
 
-function OpenPositionCard({ trade: t, markPrices, index, onClose }: {
+function OpenPositionCard({ trade: t, markPrices, spotPrice, index, onClose }: {
   trade: Trade
   markPrices: Record<string, number>
+  spotPrice: number
   index: number
   onClose: (args: { id: string; exit_price: number }) => void
 }) {
+  const [expanded, setExpanded] = useState(false)
   const mark = markPrices[t.symbol]
   const pnl  = calcUnrealisedPnl(t, mark)
   const pct  = mark && t.entry_price > 0 ? ((mark - t.entry_price) / t.entry_price * 100) : 0
+  const mult = t.asset === 'BTC' ? 0.1 : 1
+  const dir  = t.side === 'BUY' ? 1 : -1
+
+  // Per-leg P&L stats
+  const maxProfit = t.option_side === 'CALL'
+    ? (t.side === 'BUY' ? Infinity : t.entry_price * mult * t.quantity)
+    : (t.side === 'BUY' ? (t.strike_price - t.entry_price) * mult * t.quantity : t.entry_price * mult * t.quantity)
+  const maxLoss = t.option_side === 'CALL'
+    ? (t.side === 'BUY' ? t.entry_price * mult * t.quantity : Infinity)
+    : (t.side === 'BUY' ? t.entry_price * mult * t.quantity : Infinity)
+  const breakeven = t.option_side === 'CALL'
+    ? (t.side === 'BUY' ? t.strike_price + t.entry_price : t.strike_price - t.entry_price)
+    : (t.side === 'BUY' ? t.strike_price - t.entry_price : t.strike_price + t.entry_price)
+
+  const payoffData = buildPayoff(t, spotPrice)
+  const livePnlPoint = spotPrice > 0 ? +(
+    (t.option_side === 'CALL'
+      ? Math.max(0, spotPrice - t.strike_price)
+      : Math.max(0, t.strike_price - spotPrice)
+    - (dir === 1 ? t.entry_price : -t.entry_price)) * mult * t.quantity * dir
+  ).toFixed(2) : null
 
   return (
     <motion.div
       initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.04 }}
-      className={`rounded-2xl border p-4 ${pnl >= 0 ? 'bg-emerald-950/20 border-emerald-800/30' : 'bg-red-950/20 border-red-800/30'}`}>
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-xs font-mono font-bold text-white">{t.symbol}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-              t.option_side === 'CALL' ? 'bg-emerald-900/60 text-emerald-400' : 'bg-red-900/60 text-red-400'
-            }`}>{t.option_side}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-              t.side === 'BUY' ? 'bg-blue-900/50 text-blue-300' : 'bg-orange-900/50 text-orange-300'
-            }`}>{t.side}</span>
+      className={`rounded-2xl border ${pnl >= 0 ? 'bg-emerald-950/20 border-emerald-800/30' : 'bg-red-950/20 border-red-800/30'}`}>
+
+      {/* Main row */}
+      <div className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="text-xs font-mono font-bold text-white">{t.symbol}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                t.option_side === 'CALL' ? 'bg-emerald-900/60 text-emerald-400' : 'bg-red-900/60 text-red-400'
+              }`}>{t.option_side}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                t.side === 'BUY' ? 'bg-blue-900/50 text-blue-300' : 'bg-orange-900/50 text-orange-300'
+              }`}>{t.side}</span>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] text-slate-500">
+              <Clock className="w-2.5 h-2.5" />
+              {msToExpiry(t.expiry_date)} · Strike ${Number(t.strike_price).toLocaleString()}
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-[10px] text-slate-500">
-            <Clock className="w-2.5 h-2.5" />
-            {msToExpiry(t.expiry_date)} · Strike ${Number(t.strike_price).toLocaleString()}
+          <div className="text-right">
+            <div className={`flex items-center gap-1 justify-end text-sm font-bold font-mono ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {pnl >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}
+            </div>
+            <div className={`text-[10px] font-mono mt-0.5 ${pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+              {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
+            </div>
           </div>
         </div>
-        <div className="text-right">
-          <div className={`flex items-center gap-1 justify-end text-sm font-bold font-mono ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            {pnl >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-            {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}
-          </div>
-          <div className={`text-[10px] font-mono mt-0.5 ${pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-            {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
-          </div>
+
+        <div className="grid grid-cols-3 gap-2 text-[10px] mb-3">
+          <div><span className="text-slate-600">Qty</span><div className="text-slate-300 font-mono">{t.quantity}</div></div>
+          <div><span className="text-slate-600">Entry</span><div className="text-slate-300 font-mono">${Number(t.entry_price).toFixed(4)}</div></div>
+          <div><span className="text-slate-600">Mark</span><div className="text-slate-300 font-mono">{mark ? `$${mark.toFixed(4)}` : '—'}</div></div>
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={() => setExpanded(e => !e)}
+            className="flex-1 py-1.5 rounded-xl bg-indigo-900/30 border border-indigo-700/30 text-indigo-400 text-[11px] font-medium hover:bg-indigo-900/50 transition-colors flex items-center justify-center gap-1">
+            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            Payoff diagram
+          </button>
+          <button onClick={() => onClose({ id: t.id, exit_price: mark ?? t.entry_price })}
+            className="flex-1 py-1.5 rounded-xl bg-slate-800 border border-slate-700/50 text-slate-400 text-[11px] font-medium hover:bg-slate-700 transition-colors">
+            Close position
+          </button>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-2 text-[10px] mb-3">
-        <div><span className="text-slate-600">Qty</span><div className="text-slate-300 font-mono">{t.quantity}</div></div>
-        <div><span className="text-slate-600">Entry</span><div className="text-slate-300 font-mono">${Number(t.entry_price).toFixed(4)}</div></div>
-        <div><span className="text-slate-600">Mark</span><div className="text-slate-300 font-mono">{mark ? `$${mark.toFixed(4)}` : '—'}</div></div>
-      </div>
-      <button onClick={() => onClose({ id: t.id, exit_price: mark ?? t.entry_price })}
-        className="w-full py-1.5 rounded-xl bg-slate-800 border border-slate-700/50 text-slate-400 text-[11px] font-medium hover:bg-slate-700 transition-colors">
-        Close position
-      </button>
+
+      {/* Expandable payoff diagram */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden border-t border-white/5">
+            <div className="p-4 space-y-3">
+
+              {/* Stats row */}
+              <div className="grid grid-cols-3 gap-2 text-[10px]">
+                <div className="rounded-xl bg-slate-800/60 p-2 text-center">
+                  <div className="text-slate-500 mb-0.5">Max Profit</div>
+                  <div className="text-emerald-400 font-mono font-bold">
+                    {maxProfit === Infinity ? '∞' : fmtUsd(maxProfit)}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-slate-800/60 p-2 text-center">
+                  <div className="text-slate-500 mb-0.5">Max Loss</div>
+                  <div className="text-red-400 font-mono font-bold">
+                    {maxLoss === Infinity ? '∞' : fmtUsd(-maxLoss)}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-slate-800/60 p-2 text-center">
+                  <div className="text-slate-500 mb-0.5">Breakeven</div>
+                  <div className="text-indigo-300 font-mono font-bold">${breakeven.toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
+                </div>
+              </div>
+
+              {/* Payoff chart */}
+              <div>
+                <p className="text-[10px] text-slate-500 mb-2">At-expiry payoff · current spot <span className="text-indigo-300 font-mono">${spotPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span></p>
+                <ResponsiveContainer width="100%" height={140}>
+                  <ComposedChart data={payoffData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id={`payGrad-${t.id}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor={pnl >= 0 ? '#10b981' : '#ef4444'} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={pnl >= 0 ? '#10b981' : '#ef4444'} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="price" tick={{ fontSize: 8, fill: '#64748b' }} tickLine={false} axisLine={false}
+                      tickFormatter={v => `$${(v/1000).toFixed(0)}k`} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 8, fill: '#64748b' }} tickLine={false} axisLine={false}
+                      tickFormatter={v => v >= 0 ? `+$${v}` : `-$${Math.abs(v)}`} width={44} />
+                    <Tooltip
+                      contentStyle={{ background: '#0d0d20', border: '1px solid #1e1e3f', borderRadius: 8, fontSize: 10 }}
+                      formatter={(v) => { const n = Number(v); return [n >= 0 ? `+$${n.toFixed(2)}` : `-$${Math.abs(n).toFixed(2)}`, 'P&L at expiry'] }}
+                      labelFormatter={v => `Spot $${Number(v).toLocaleString()}`}
+                    />
+                    {/* Zero line */}
+                    <ReferenceLine y={0} stroke="#334155" strokeDasharray="3 3" />
+                    {/* Current spot price */}
+                    {spotPrice > 0 && <ReferenceLine x={+spotPrice.toFixed(0)} stroke="#6366f1" strokeDasharray="4 2" label={{ value: 'Now', position: 'top', fontSize: 8, fill: '#6366f1' }} />}
+                    {/* Strike price */}
+                    <ReferenceLine x={+t.strike_price.toFixed(0)} stroke="#475569" strokeDasharray="2 2" label={{ value: 'K', position: 'top', fontSize: 8, fill: '#475569' }} />
+                    <Area type="monotone" dataKey="pnl" stroke={pnl >= 0 ? '#10b981' : '#ef4444'}
+                      strokeWidth={2} fill={`url(#payGrad-${t.id})`} dot={false} />
+                    {/* Live P&L dot */}
+                    {livePnlPoint !== null && spotPrice > 0 && (
+                      <Line type="monotone" dataKey="pnl" stroke="transparent" dot={false}
+                        activeDot={false} />
+                    )}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Live P&L breakdown */}
+              <div className="rounded-xl bg-slate-800/40 border border-slate-700/30 p-3 space-y-1.5">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Live P&L breakdown</p>
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-500">{t.side} {t.option_side} · {t.quantity} contract{t.quantity > 1 ? 's' : ''}</span>
+                  <span className={`font-mono font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-600">Entry premium</span>
+                  <span className="text-slate-400 font-mono">${t.entry_price.toFixed(4)}</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-600">Current mark</span>
+                  <span className="text-slate-400 font-mono">{mark ? `$${mark.toFixed(4)}` : '—'}</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-600">P&L at expiry (if spot stays here)</span>
+                  <span className={`font-mono ${(livePnlPoint ?? 0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {livePnlPoint !== null ? (livePnlPoint >= 0 ? `+$${livePnlPoint}` : `-$${Math.abs(livePnlPoint)}`) : '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
