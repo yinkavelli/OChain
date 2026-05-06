@@ -35,6 +35,30 @@ async function spotGet<T>(path: string): Promise<T> {
   return res.json()
 }
 
+// ── HV30 calculation ──────────────────────────────────────────────────
+// Fetch 31 daily closes → 30 log returns → annualised std dev
+
+async function fetchHV30(symbol: string): Promise<number> {
+  try {
+    // Each kline: [openTime, open, high, low, close, ...]
+    const klines = await spotGet<[number, string, string, string, string, ...unknown[]][]>(
+      `/api/v3/klines?symbol=${symbol}&interval=1d&limit=32`
+    )
+    if (klines.length < 2) return 0
+    const closes = klines.map(k => parseFloat(k[4]))
+    const logReturns: number[] = []
+    for (let i = 1; i < closes.length; i++) {
+      logReturns.push(Math.log(closes[i] / closes[i - 1]))
+    }
+    const n    = logReturns.length
+    const mean = logReturns.reduce((s, r) => s + r, 0) / n
+    const variance = logReturns.reduce((s, r) => s + (r - mean) ** 2, 0) / (n - 1)
+    return +(Math.sqrt(variance) * Math.sqrt(252) * 100).toFixed(1)
+  } catch {
+    return 0
+  }
+}
+
 async function optionsGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
   const res = await fetch(optionsUrl(path, params))
   if (!res.ok) throw new Error(`Options API ${res.status}`)
@@ -150,13 +174,43 @@ function avgATMiv(contracts: LiveContract[], underlying: string, price: number):
   return +(pool.reduce((s, c) => s + c.iv, 0) / pool.length).toFixed(1)
 }
 
+// ── IV Rank from Supabase history ─────────────────────────────────────
+
+import { supabase } from './supabase'
+
+async function fetchIVRank(symbol: string, currentIV: number): Promise<number> {
+  if (currentIV <= 0) return 0
+  try {
+    // Store today's IV reading
+    await supabase.from('iv_history').insert({ symbol, iv30: currentIV })
+
+    // Fetch up to 252 trading days of history
+    const { data } = await supabase
+      .from('iv_history')
+      .select('iv30, recorded_at')
+      .eq('symbol', symbol)
+      .order('recorded_at', { ascending: false })
+      .limit(252)
+
+    if (!data || data.length < 10) return 0  // not enough history yet
+
+    const ivValues = data.map(r => r.iv30)
+    const ivMin = Math.min(...ivValues)
+    const ivMax = Math.max(...ivValues)
+    if (ivMax === ivMin) return 50
+    return +Math.min(99, Math.round(((currentIV - ivMin) / (ivMax - ivMin)) * 100)).toFixed(0)
+  } catch {
+    return 0
+  }
+}
+
 // ── Master fetch ──────────────────────────────────────────────────────
 
 export async function fetchLiveData(): Promise<LiveAsset[]> {
-  // Fetch spot + options in parallel; options failure is non-fatal
-  const [spotTickers, optionsResult] = await Promise.allSettled([
+  const [spotTickers, optionsResult, ...hv30Results] = await Promise.allSettled([
     fetchSpotTickers(),
     fetchOptionsData(),
+    ...SPOT_SYMBOLS.map(s => fetchHV30(s)),
   ])
 
   const spotMap = new Map<string, SpotTicker>()
@@ -168,12 +222,19 @@ export async function fetchLiveData(): Promise<LiveAsset[]> {
     ? optionsResult.value
     : { contracts: [] as LiveContract[] }
 
-  return SPOT_SYMBOLS.map(sym => {
+  const hv30Map = Object.fromEntries(
+    SPOT_SYMBOLS.map((sym, i) => [sym, hv30Results[i].status === 'fulfilled' ? (hv30Results[i] as PromiseFulfilledResult<number>).value : 0])
+  )
+
+  // Build assets synchronously first, then enrich IV Rank async
+  const assets = await Promise.all(SPOT_SYMBOLS.map(async sym => {
     const spot    = spotMap.get(sym)
     const price   = parseFloat(spot?.lastPrice ?? '0') || 0
     const own     = contracts.filter(c => c.underlying === sym).map(c => ({ ...c, underlyingPrice: price }))
     const expDates = [...new Set(own.map(c => c.expiry))].sort()
     const iv30    = avgATMiv(own, sym, price)
+    const hv30    = hv30Map[sym] ?? 0
+    const ivRank  = await fetchIVRank(sym, iv30)
 
     return {
       symbol: sym,
@@ -183,13 +244,15 @@ export async function fetchLiveData(): Promise<LiveAsset[]> {
       changePct: parseFloat(spot?.priceChangePercent ?? '0') || 0,
       volume24h: parseFloat(spot?.quoteVolume ?? '0') || 0,
       iv30,
-      ivRank: iv30 > 0 ? Math.min(99, Math.round(iv30 * 0.88)) : 0,
-      hv30: 0,
+      ivRank,
+      hv30,
       hasOptions: OPTIONS_UNDERLYINGS.includes(sym),
       contracts: own,
       expiryDates: expDates,
     }
-  })
+  }))
+
+  return assets
 }
 
 interface BnOpenInterest {
