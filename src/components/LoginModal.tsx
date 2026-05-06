@@ -24,7 +24,7 @@ export function LoginModal({ onClose }: Props) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       >
         <motion.div
@@ -33,7 +33,7 @@ export function LoginModal({ onClose }: Props) {
           exit={{ y: 80, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 380, damping: 36 }}
           onClick={e => e.stopPropagation()}
-          className="w-full max-w-md rounded-t-3xl bg-[#0a0a1a] border-t border-x border-indigo-900/40 p-8 space-y-6"
+          className="w-full max-w-md rounded-t-3xl bg-[#0a0a1a] border-t border-x border-indigo-900/40 p-8 space-y-6 z-[81]"
         >
           <div className="text-center space-y-2">
             <div className="w-14 h-14 rounded-2xl bg-indigo-500/15 flex items-center justify-center mx-auto mb-4">
