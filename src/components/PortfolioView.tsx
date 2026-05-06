@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { LogIn, Clock, TrendingUp, TrendingDown, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, ComposedChart, Line } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, ComposedChart } from 'recharts'
 import { useAuth } from '../hooks/useAuth'
 import { useTrades, useCloseTrade } from '../hooks/useTrades'
 import { usePnlHistory, usePnlSnapshotter, calcUnrealisedPnl } from '../hooks/usePnL'
@@ -243,6 +243,13 @@ function OpenPositionCard({ trade: t, markPrices, spotPrice, index, onClose }: {
     : (t.side === 'BUY' ? t.strike_price - t.entry_price : t.strike_price + t.entry_price)
 
   const payoffData = buildPayoff(t, spotPrice)
+
+  // Snap spot and strike to nearest data point for ReferenceLine
+  const snapToData = (val: number) =>
+    payoffData.reduce((best, d) => Math.abs(d.price - val) < Math.abs(best.price - val) ? d : best, payoffData[0])
+  const spotSnap  = spotPrice > 0 ? snapToData(spotPrice).price : null
+  const strikeSnap = snapToData(t.strike_price).price
+
   const livePnlPoint = spotPrice > 0 ? +(
     (t.option_side === 'CALL'
       ? Math.max(0, spotPrice - t.strike_price)
@@ -357,17 +364,21 @@ function OpenPositionCard({ trade: t, markPrices, spotPrice, index, onClose }: {
                     />
                     {/* Zero line */}
                     <ReferenceLine y={0} stroke="#334155" strokeDasharray="3 3" />
-                    {/* Current spot price */}
-                    {spotPrice > 0 && <ReferenceLine x={+spotPrice.toFixed(0)} stroke="#6366f1" strokeDasharray="4 2" label={{ value: 'Now', position: 'top', fontSize: 8, fill: '#6366f1' }} />}
                     {/* Strike price */}
-                    <ReferenceLine x={+t.strike_price.toFixed(0)} stroke="#475569" strokeDasharray="2 2" label={{ value: 'K', position: 'top', fontSize: 8, fill: '#475569' }} />
+                    <ReferenceLine x={strikeSnap} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3"
+                      label={{ value: 'Strike', position: 'insideTopLeft', fontSize: 8, fill: '#94a3b8', dy: -2 }} />
+                    {/* Current spot price */}
+                    {spotSnap && <ReferenceLine x={spotSnap} stroke="#6366f1" strokeWidth={2}
+                      label={{ value: '▼ Spot', position: 'insideTopRight', fontSize: 8, fill: '#818cf8', dy: -2 }} />}
                     <Area type="monotone" dataKey="pnl" stroke={pnl >= 0 ? '#10b981' : '#ef4444'}
-                      strokeWidth={2} fill={`url(#payGrad-${t.id})`} dot={false} />
-                    {/* Live P&L dot */}
-                    {livePnlPoint !== null && spotPrice > 0 && (
-                      <Line type="monotone" dataKey="pnl" stroke="transparent" dot={false}
-                        activeDot={false} />
-                    )}
+                      strokeWidth={2} fill={`url(#payGrad-${t.id})`}
+                      dot={(props) => {
+                        if (props.payload?.price !== spotSnap) return <g key={props.key} />
+                        return (
+                          <circle key={props.key} cx={props.cx} cy={props.cy} r={5}
+                            fill="#6366f1" stroke="#fff" strokeWidth={1.5} />
+                        )
+                      }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
