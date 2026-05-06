@@ -21,7 +21,16 @@
       "Bash(git commit -m 'Add Vercel rewrite for eapi proxy *)",
       "Bash(git push *)",
       "Bash(vercel deploy *)",
-      "Bash(git commit -m 'Fix misleading IP restriction advice for client-side app *)"
+      "Bash(git commit -m 'Fix misleading IP restriction advice for client-side app *)",
+      "Bash(claude mcp *)",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__get_publishable_keys",
+      "mcp__supabase__get_project_url",
+      "mcp__supabase__apply_migration",
+      "Bash(npx skills *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\aadegbola\\.claude\\projects\\c--Users-aadegbola-ClaudeCodeProjects-OChain\\memory"
     ]
   }
 }

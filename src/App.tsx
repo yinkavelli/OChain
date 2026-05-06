@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { RefreshCw, TrendingUp, Activity, Zap, BarChart2, WifiOff } from 'lucide-react'
+import { RefreshCw, TrendingUp, Activity, Zap, BarChart2, WifiOff, LogIn, LogOut } from 'lucide-react'
+import { useAuth } from './hooks/useAuth'
+import { LoginModal } from './components/LoginModal'
 
 import { Ticker } from './components/Ticker'
 import { StatCard } from './components/StatCard'
@@ -20,6 +22,8 @@ import { useLiveData, useMergedAssets, useLiveStrategies } from './hooks/useLive
 import { useQueryClient } from '@tanstack/react-query'
 
 export default function App() {
+  const { user, signOut } = useAuth()
+  const [showLogin, setShowLogin] = useState(false)
   const [activeTab, setActiveTab] = useState('dashboard')
   const [selectedAsset, setSelectedAsset] = useState('BTCUSDT')
   const [strategyFilter, setStrategyFilter] = useState<StrategyType | 'All'>('All')
@@ -60,7 +64,22 @@ export default function App() {
     ? (filtered.reduce((s, x) => s + x.probabilityOfProfit, 0) / filtered.length).toFixed(1)
     : '—'
 
+  // Build markPrices map from live contracts for P&L calculation
+  const markPrices = useMemo(() => {
+    const map: Record<string, number> = {}
+    if (liveAssets) {
+      for (const a of liveAssets) {
+        for (const c of (a.contracts ?? [])) {
+          if (c.symbol && c.markPrice > 0) map[c.symbol] = c.markPrice
+        }
+      }
+    }
+    return map
+  }, [liveAssets])
+
   return (
+    <>
+    {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     <div className="min-h-svh bg-[#0a0a14] text-slate-200">
       <header className="sticky top-0 z-20 border-b border-[#1e1e3f]"
         style={{ background: 'rgba(10,10,20,0.95)', backdropFilter: 'blur(20px)' }}>
@@ -94,6 +113,19 @@ export default function App() {
               className="w-8 h-8 rounded-xl bg-[#1a1a3a] border border-[#1e1e3f] flex items-center justify-center text-slate-400 hover:text-indigo-400 transition-colors">
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing || isLoading ? 'animate-spin text-indigo-400' : ''}`} />
             </button>
+            {user ? (
+              <button onClick={() => signOut()}
+                className="w-8 h-8 rounded-xl bg-[#1a1a3a] border border-[#1e1e3f] flex items-center justify-center text-slate-400 hover:text-red-400 transition-colors"
+                title="Sign out">
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button onClick={() => setShowLogin(true)}
+                className="w-8 h-8 rounded-xl bg-indigo-600/30 border border-indigo-700/50 flex items-center justify-center text-indigo-400 hover:bg-indigo-600/50 transition-colors"
+                title="Sign in">
+                <LogIn className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
         <Ticker />
@@ -193,7 +225,7 @@ export default function App() {
           {activeTab === 'portfolio' && (
             <motion.div key="portfolio"
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <PortfolioView />
+              <PortfolioView markPrices={markPrices} />
             </motion.div>
           )}
 
@@ -245,5 +277,6 @@ export default function App() {
       <BottomNav active={activeTab} onChange={setActiveTab} />
       <StrategyDrawer strategy={selectedStrategy} onClose={() => setSelectedStrategy(null)} />
     </div>
+    </>
   )
 }
