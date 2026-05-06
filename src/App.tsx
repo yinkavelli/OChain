@@ -212,11 +212,7 @@ export default function App() {
           {activeTab === 'chains' && (
             <motion.div key="chains"
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              className="space-y-4">
-              <div>
-                <h2 className="text-lg font-bold text-white mb-0.5">Option Chains</h2>
-                <p className="text-xs text-slate-500">Live bid/ask matrix · {selectedAsset.replace('USDT', '')}</p>
-              </div>
+              className="space-y-3">
               <AssetSelector assets={assets} selected={selectedAsset} onSelect={setSelectedAsset} />
               <OptionChainView selectedAsset={selectedAsset} />
             </motion.div>

@@ -119,15 +119,17 @@ function buildLiveChain(contracts: LiveContract[], expiry: string, price: number
 
 function ChainTable({ rows, side }: { rows: ChainRow[]; side: 'call' | 'put'; price: number }) {
   const cols = side === 'call' ? CALL_COLS : PUT_COLS
-  const totalW = cols.reduce((s, c) => s + c.width, 0) + 64 // +64 for strike column
+  const totalW = cols.reduce((s, c) => s + c.width, 0) + 64
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-[#1e1e3f]" style={{ WebkitOverflowScrolling: 'touch' }}>
+    <div className="rounded-2xl border border-[#1e1e3f] overflow-auto max-h-[62svh]"
+      style={{ WebkitOverflowScrolling: 'touch' }}>
       <div style={{ minWidth: totalW }}>
-        {/* Header */}
-        <div className="flex bg-[#0a0a18] border-b border-[#1e1e3f] sticky top-0 z-10">
-          {/* Strike — always first */}
-          <div style={{ width: 64, minWidth: 64 }} className="px-2 py-2 text-center bg-indigo-950/30">
+        {/* Header row — sticky top */}
+        <div className="flex bg-[#0a0a18] border-b border-[#1e1e3f] sticky top-0 z-20">
+          {/* Strike header — sticky left + top (corner freeze) */}
+          <div style={{ width: 64, minWidth: 64 }}
+            className="sticky left-0 z-30 px-2 py-2 text-center bg-indigo-950/60 border-r border-indigo-900/30">
             <div className="text-[10px] font-bold text-indigo-400">Strike</div>
             <div className="text-[9px] text-slate-600">price</div>
           </div>
@@ -150,8 +152,11 @@ function ChainTable({ rows, side }: { rows: ChainRow[]; side: 'call' | 'put'; pr
               row.isATM ? 'bg-indigo-950/25' : i % 2 === 0 ? 'bg-transparent' : 'bg-[#0d0d1e]/30'
             }`}
           >
-            {/* Strike — always first */}
-            <div style={{ width: 64, minWidth: 64 }} className="px-2 py-2.5 text-center bg-indigo-950/20 border-x border-indigo-900/20">
+            {/* Strike cell — sticky left */}
+            <div style={{ width: 64, minWidth: 64 }}
+              className={`sticky left-0 z-10 px-2 py-2.5 text-center border-r border-indigo-900/20 ${
+                row.isATM ? 'bg-indigo-950/60' : i % 2 === 0 ? 'bg-[#0a0a14]' : 'bg-[#0c0c1a]'
+              }`}>
               <div className={`text-xs font-bold font-mono ${row.isATM ? 'text-indigo-300' : 'text-slate-200'}`}>
                 {fmtPrice(row.strike)}
               </div>
