@@ -86,7 +86,7 @@ export default function App() {
         style={{ background: 'rgba(10,10,20,0.95)', backdropFilter: 'blur(20px)' }}>
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center">
-            <img src={oChainLogo} alt="OChain" className="h-9 w-auto" />
+            <img src={oChainLogo} alt="OChain" className="h-10 w-auto drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
           </div>
           <div className="flex items-center gap-2">
             <div className="text-[10px] text-right">

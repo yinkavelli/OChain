@@ -36,7 +36,7 @@ export function LoginModal({ onClose }: Props) {
           className="w-full max-w-md rounded-t-3xl bg-[#0a0a1a] border-t border-x border-indigo-900/40 p-8 space-y-6 z-[81]"
         >
           <div className="text-center space-y-2">
-            <img src="/OChain.png" alt="OChain" className="h-14 w-auto mx-auto mb-2" />
+            <img src="/OChain.png" alt="OChain" className="h-16 w-auto mx-auto mb-2 drop-shadow-[0_0_12px_rgba(99,102,241,0.6)]" />
             <h2 className="text-xl font-bold text-white">Sign in to OChain</h2>
             <p className="text-sm text-slate-400">Save trades, track P&L, and view your history</p>
           </div>
