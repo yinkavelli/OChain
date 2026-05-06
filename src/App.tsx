@@ -139,24 +139,39 @@ export default function App() {
               className="space-y-5">
               <AssetSelector assets={assets} selected={selectedAsset} onSelect={setSelectedAsset} />
               <div className="grid grid-cols-2 gap-3">
-                <StatCard label="IV Rank" value={`${asset.ivRank}`}
-                  sub={asset.ivRank > 70 ? '↑ Elevated — sell premium' : '↓ Low — buy premium'}
+                <StatCard
+                  label={`IV Rank${asset.ivRankSource === 'bootstrapped' ? ' ~' : asset.ivRankSource === 'insufficient' ? ' —' : ''}`}
+                  value={asset.ivRankSource === 'insufficient' ? '—' : `${asset.ivRank}`}
+                  sub={
+                    asset.ivRankSource === 'insufficient' ? 'Building history…' :
+                    asset.ivRankSource === 'bootstrapped' ? `~${asset.ivRank > 70 ? '↑ Elevated' : '↓ Low'} (est.)` :
+                    asset.ivRank > 70 ? '↑ Elevated — sell premium' : '↓ Low — buy premium'
+                  }
                   icon={<Activity className="w-4 h-4" />}
-                  color={asset.ivRank > 70 ? 'emerald' : 'indigo'}
+                  color={asset.ivRankSource === 'insufficient' ? 'indigo' : asset.ivRank > 70 ? 'emerald' : 'indigo'}
                   trend={asset.ivRank > 70 ? 'up' : 'down'} delay={0}
                   tooltip={{
                     title: 'IV Rank (IVR)',
-                    body: 'IV Rank measures where current Implied Volatility sits relative to its 52-week high/low range. A rank of 80 means IV is in the top 20% of its annual range — options are expensive. A rank of 20 means IV is cheap relative to history.',
-                    how: 'When IVR is above 70, options are richly priced — favour premium-selling strategies like Covered Calls, Cash-Secured Puts, or Iron Condors to collect inflated premium. When IVR is below 30, options are cheap — favour premium-buying strategies like Long Straddles or debit spreads.',
+                    body: 'IV Rank measures where current IV sits relative to its historical range. A rank of 80 means IV is in the top 20% of its range — options are expensive. Sources: "live" = built from stored daily readings; "~est." = bootstrapped from option klines via Black-Scholes back-solve; "—" = insufficient data yet.',
+                    how: 'When IVR is above 70, options are richly priced — favour premium-selling strategies. When IVR is below 30, options are cheap — favour premium-buying strategies like Long Straddles.',
                     signal: 'IVR > 70 → Sell premium. IVR < 30 → Buy premium. IVR 30–70 → Neutral, favour spreads.',
                   }} />
-                <StatCard label="IV30" value={`${asset.iv30 > 0 ? asset.iv30 + '%' : '—'}`} sub={`HV30: ${asset.hv30 > 0 ? asset.hv30 + '%' : '—'}`}
-                  icon={<BarChart2 className="w-4 h-4" />} color="violet" delay={0.05}
+                <StatCard
+                  label="IV30"
+                  value={`${asset.iv30 > 0 ? asset.iv30 + '%' : '—'}`}
+                  sub={
+                    asset.hv30 > 0 && (asset.ivHvRatio ?? 0) > 0
+                      ? `HV30: ${asset.hv30}% · ${asset.ivHvRatio}× ratio`
+                      : `HV30: ${asset.hv30 > 0 ? asset.hv30 + '%' : '—'}`
+                  }
+                  icon={<BarChart2 className="w-4 h-4" />}
+                  color={(asset.ivHvRatio ?? 0) > 1.2 ? 'emerald' : (asset.ivHvRatio ?? 0) > 0 && (asset.ivHvRatio ?? 0) < 0.9 ? 'violet' : 'violet'}
+                  delay={0.05}
                   tooltip={{
                     title: 'Implied vs Historical Volatility',
-                    body: 'IV30 is the market\'s consensus forecast of annualised price movement over the next 30 days, derived from option prices. HV30 is the actual realised volatility over the past 30 days. The gap between them is the "vol premium" options sellers capture.',
-                    how: 'When IV30 significantly exceeds HV30 (IV > HV by 10%+ points), options are priced above recent reality — a strong signal to sell premium. When IV30 is close to or below HV30, the edge disappears and buying vol may be worth exploring.',
-                    signal: 'IV30 > HV30 by 10%+ → Sell vol. IV30 ≈ HV30 → Neutral. IV30 < HV30 → Consider long vol.',
+                    body: 'IV30 is the market\'s 30-day implied vol from ATM option markIV. HV30 is annualised realised vol from 30 daily log returns. The IV/HV ratio shows how much premium the market is pricing over recent realised vol — the "vol risk premium".',
+                    how: 'Ratio > 1.2 means options are pricing 20%+ above recent realised vol — strong sell-premium signal. Ratio < 0.9 means options are cheap relative to realised vol — consider buying vol.',
+                    signal: 'Ratio > 1.2 → Sell vol. Ratio 0.9–1.2 → Neutral. Ratio < 0.9 → Buy vol.',
                   }} />
                 <StatCard label="Top Score" value={topScore} sub={filtered[0]?.type ?? '—'}
                   icon={<TrendingUp className="w-4 h-4" />} color="indigo" delay={0.1}

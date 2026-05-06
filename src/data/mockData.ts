@@ -58,6 +58,8 @@ export interface Asset {
   iv30: number
   hv30: number
   ivRank: number
+  ivRankSource?: 'live' | 'bootstrapped' | 'insufficient'
+  ivHvRatio?: number
 }
 
 const EXPIRIES = ['2026-05-09', '2026-05-16', '2026-05-23', '2026-05-30', '2026-06-27']

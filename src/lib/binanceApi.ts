@@ -149,7 +149,9 @@ export interface LiveAsset {
   volume24h: number
   iv30: number
   ivRank: number
+  ivRankSource: 'live' | 'bootstrapped' | 'insufficient'
   hv30: number
+  ivHvRatio: number   // IV30 / HV30 — vol premium ratio
   hasOptions: boolean
   contracts: LiveContract[]
   expiryDates: string[]
@@ -174,33 +176,100 @@ function avgATMiv(contracts: LiveContract[], underlying: string, price: number):
   return +(pool.reduce((s, c) => s + c.iv, 0) / pool.length).toFixed(1)
 }
 
-// ── IV Rank from Supabase history ─────────────────────────────────────
+// ── IV Rank: Supabase live history + bootstrapped fallback ────────────
 
 import { supabase } from './supabase'
+import { solveIV } from './blackScholes'
 
-async function fetchIVRank(symbol: string, currentIV: number): Promise<number> {
-  if (currentIV <= 0) return 0
+function calcIVRankFromSeries(current: number, series: number[]): number {
+  const ivMin = Math.min(...series)
+  const ivMax = Math.max(...series)
+  if (ivMax === ivMin) return 50
+  return Math.min(99, Math.round(((current - ivMin) / (ivMax - ivMin)) * 100))
+}
+
+// Bootstrap IV history from option klines using Black-Scholes back-solve
+async function bootstrapIVHistory(
+  symbol: string,
+  contracts: LiveContract[],
+  currentPrice: number
+): Promise<number[]> {
+  if (!contracts.length || currentPrice <= 0) return []
   try {
-    // Store today's IV reading
-    await supabase.from('iv_history').insert({ symbol, iv30: currentIV })
+    // Pick the ATM call with ~20-40 DTE
+    const atm = contracts
+      .filter(c => c.underlying === symbol && c.type === 'CALL' && c.daysToExpiry >= 10 && c.daysToExpiry <= 45)
+      .sort((a, b) => Math.abs(a.strike - currentPrice) - Math.abs(b.strike - currentPrice))[0]
+    if (!atm) return []
 
-    // Fetch up to 252 trading days of history
+    // Fetch daily klines for that option symbol
+    const klines = await optionsGet<[number, string, string, string, string, ...unknown[]][]>(
+      '/klines', { symbol: atm.symbol, interval: '1d', limit: '90' }
+    )
+    if (klines.length < 5) return []
+
+    // Fetch spot klines for the same range
+    const spotKlines = await spotGet<[number, string, string, string, string, ...unknown[]][]>(
+      `/api/v3/klines?symbol=${symbol}&interval=1d&limit=90`
+    )
+    const spotMap = new Map(spotKlines.map(k => [k[0], parseFloat(k[4] as string)]))
+
+    const expiryMs = new Date(atm.expiry).getTime()
+    const ivSeries: number[] = []
+
+    for (const k of klines) {
+      const openTime  = k[0] as number
+      const closePrice = parseFloat(k[4] as string)
+      if (!closePrice || closePrice <= 0) continue
+      const spotAtTime = spotMap.get(openTime)
+      if (!spotAtTime || spotAtTime <= 0) continue
+      const T = Math.max(0, (expiryMs - openTime) / (365 * 86_400_000))
+      if (T <= 0) continue
+      const iv = solveIV(closePrice, spotAtTime, atm.strike, T, 'CALL')
+      if (iv > 0 && iv < 500) ivSeries.push(iv)
+    }
+
+    return ivSeries
+  } catch {
+    return []
+  }
+}
+
+async function fetchIVRank(
+  symbol: string,
+  currentIV: number,
+  contracts: LiveContract[],
+  currentPrice: number
+): Promise<{ rank: number; source: 'live' | 'bootstrapped' | 'insufficient' }> {
+  if (currentIV <= 0) return { rank: 0, source: 'insufficient' }
+
+  try {
+    // Store current IV reading (non-blocking)
+    supabase.from('iv_history').insert({ symbol, iv30: currentIV }).then(() => {})
+
+    // Try Supabase history first
     const { data } = await supabase
       .from('iv_history')
-      .select('iv30, recorded_at')
+      .select('iv30')
       .eq('symbol', symbol)
       .order('recorded_at', { ascending: false })
       .limit(252)
 
-    if (!data || data.length < 10) return 0  // not enough history yet
+    if (data && data.length >= 30) {
+      const series = data.map(r => Number(r.iv30))
+      return { rank: calcIVRankFromSeries(currentIV, series), source: 'live' }
+    }
 
-    const ivValues = data.map(r => r.iv30)
-    const ivMin = Math.min(...ivValues)
-    const ivMax = Math.max(...ivValues)
-    if (ivMax === ivMin) return 50
-    return +Math.min(99, Math.round(((currentIV - ivMin) / (ivMax - ivMin)) * 100)).toFixed(0)
+    // Fall back to bootstrapped history from option klines
+    const bootstrapped = await bootstrapIVHistory(symbol, contracts, currentPrice)
+    if (bootstrapped.length >= 10) {
+      const combined = [...bootstrapped, ...(data?.map(r => Number(r.iv30)) ?? []), currentIV]
+      return { rank: calcIVRankFromSeries(currentIV, combined), source: 'bootstrapped' }
+    }
+
+    return { rank: 0, source: 'insufficient' }
   } catch {
-    return 0
+    return { rank: 0, source: 'insufficient' }
   }
 }
 
@@ -226,7 +295,6 @@ export async function fetchLiveData(): Promise<LiveAsset[]> {
     SPOT_SYMBOLS.map((sym, i) => [sym, hv30Results[i].status === 'fulfilled' ? (hv30Results[i] as PromiseFulfilledResult<number>).value : 0])
   )
 
-  // Build assets synchronously first, then enrich IV Rank async
   const assets = await Promise.all(SPOT_SYMBOLS.map(async sym => {
     const spot    = spotMap.get(sym)
     const price   = parseFloat(spot?.lastPrice ?? '0') || 0
@@ -234,7 +302,8 @@ export async function fetchLiveData(): Promise<LiveAsset[]> {
     const expDates = [...new Set(own.map(c => c.expiry))].sort()
     const iv30    = avgATMiv(own, sym, price)
     const hv30    = hv30Map[sym] ?? 0
-    const ivRank  = await fetchIVRank(sym, iv30)
+    const { rank: ivRank, source: ivRankSource } = await fetchIVRank(sym, iv30, own, price)
+    const ivHvRatio = hv30 > 0 ? +(iv30 / hv30).toFixed(2) : 0
 
     return {
       symbol: sym,
@@ -245,10 +314,12 @@ export async function fetchLiveData(): Promise<LiveAsset[]> {
       volume24h: parseFloat(spot?.quoteVolume ?? '0') || 0,
       iv30,
       ivRank,
+      ivRankSource,
       hv30,
+      ivHvRatio,
       hasOptions: OPTIONS_UNDERLYINGS.includes(sym),
       contracts: own,
-      expiryDates: expDates,
+      expiryDates: own.length > 0 ? expDates : [],
     }
   }))
 
