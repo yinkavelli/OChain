@@ -1,12 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { LogIn, Clock, TrendingUp, TrendingDown, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, ComposedChart } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea, ComposedChart } from 'recharts'
 import { useAuth } from '../hooks/useAuth'
 import { useTrades, useCloseTrade } from '../hooks/useTrades'
 import { usePnlHistory, usePnlSnapshotter, calcUnrealisedPnl } from '../hooks/usePnL'
 import { LoginModal } from './LoginModal'
 import { useState } from 'react'
 import type { Trade } from '../lib/supabase'
+import { solveIV as solveIVFromMark } from '../lib/blackScholes'
 
 interface Props {
   markPrices: Record<string, number>
@@ -257,6 +258,16 @@ function OpenPositionCard({ trade: t, markPrices, spotPrice, index, onClose }: {
     - (dir === 1 ? t.entry_price : -t.entry_price)) * mult * t.quantity * dir
   ).toFixed(2) : null
 
+  // Expected move bands from IV — annualised vol scaled to DTE
+  const dte = Math.max(1, Math.round((t.expiry_date - Date.now()) / 86_400_000))
+  const markIV = mark ? solveIVFromMark(mark, spotPrice, t.strike_price, dte, t.option_side) : 0
+  const oneSdMove  = spotPrice > 0 && markIV > 0 ? spotPrice * (markIV / 100) * Math.sqrt(dte / 365) : 0
+  const twoSdMove  = oneSdMove * 2
+  const sd1Lo = spotPrice - oneSdMove
+  const sd1Hi = spotPrice + oneSdMove
+  const sd2Lo = spotPrice - twoSdMove
+  const sd2Hi = spotPrice + twoSdMove
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}
@@ -344,8 +355,16 @@ function OpenPositionCard({ trade: t, markPrices, spotPrice, index, onClose }: {
 
               {/* Payoff chart */}
               <div>
-                <p className="text-[10px] text-slate-500 mb-2">At-expiry payoff · current spot <span className="text-indigo-300 font-mono">${spotPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span></p>
-                <ResponsiveContainer width="100%" height={140}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] text-slate-500">At-expiry payoff · spot <span className="text-indigo-300 font-mono">${spotPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span></p>
+                  {oneSdMove > 0 && (
+                    <div className="flex items-center gap-2 text-[9px] text-slate-500">
+                      <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-indigo-500/30 border border-indigo-500/50" />1-SD {(oneSdMove / spotPrice * 100).toFixed(1)}%</span>
+                      <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-violet-500/20 border border-violet-500/30" />2-SD {(twoSdMove / spotPrice * 100).toFixed(1)}%</span>
+                    </div>
+                  )}
+                </div>
+                <ResponsiveContainer width="100%" height={150}>
                   <ComposedChart data={payoffData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id={`payGrad-${t.id}`} x1="0" y1="0" x2="0" y2="1">
@@ -362,6 +381,16 @@ function OpenPositionCard({ trade: t, markPrices, spotPrice, index, onClose }: {
                       formatter={(v) => { const n = Number(v); return [n >= 0 ? `+$${n.toFixed(2)}` : `-$${Math.abs(n).toFixed(2)}`, 'P&L at expiry'] }}
                       labelFormatter={v => `Spot $${Number(v).toLocaleString()}`}
                     />
+                    {/* 2-SD expected move band (95% probability) */}
+                    {twoSdMove > 0 && (
+                      <ReferenceArea x1={+sd2Lo.toFixed(0)} x2={+sd2Hi.toFixed(0)}
+                        fill="#7c3aed" fillOpacity={0.07} stroke="#7c3aed" strokeOpacity={0.2} strokeDasharray="3 3" />
+                    )}
+                    {/* 1-SD expected move band (68% probability) */}
+                    {oneSdMove > 0 && (
+                      <ReferenceArea x1={+sd1Lo.toFixed(0)} x2={+sd1Hi.toFixed(0)}
+                        fill="#6366f1" fillOpacity={0.12} stroke="#6366f1" strokeOpacity={0.4} strokeDasharray="2 2" />
+                    )}
                     {/* Zero line */}
                     <ReferenceLine y={0} stroke="#334155" strokeDasharray="3 3" />
                     {/* Strike price */}

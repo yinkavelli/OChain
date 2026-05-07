@@ -188,48 +188,120 @@ function calcIVRankFromSeries(current: number, series: number[]): number {
   return Math.min(99, Math.round(((current - ivMin) / (ivMax - ivMin)) * 100))
 }
 
-// Bootstrap IV history from option klines using Black-Scholes back-solve
+// Round price to nearest standard strike for each asset
+function nearestStrike(price: number, asset: string): number {
+  const increments: Record<string, number> = {
+    BTC: 1000, ETH: 100, BNB: 10, SOL: 5, XRP: 0.1, DOGE: 0.005
+  }
+  const inc = increments[asset] ?? 10
+  return Math.round(price / inc) * inc
+}
+
+// Format timestamp to Binance expiry format YYMMDD
+function tsToExpiry(ts: number): string {
+  const d = new Date(ts)
+  const yy = String(d.getUTCFullYear()).slice(2)
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(d.getUTCDate()).padStart(2, '0')
+  return `${yy}${mm}${dd}`
+}
+
+// Build IV series from one option symbol's klines
+async function ivSeriesFromSymbol(
+  optSymbol: string,
+  strike: number,
+  expiryMs: number,
+  spotKlines: [number, string, string, string, string, ...unknown[]][]
+): Promise<number[]> {
+  const klines = await optionsGet<[number, string, string, string, string, ...unknown[]][]>(
+    '/klines', { symbol: optSymbol, interval: '1d', limit: '90' }
+  )
+  if (klines.length < 3) return []
+
+  const spotMap = new Map(spotKlines.map(k => [k[0] as number, parseFloat(k[4] as string)]))
+  const ivs: number[] = []
+
+  for (const k of klines) {
+    const openTime   = k[0] as number
+    const closePrice = parseFloat(k[4] as string)
+    if (!closePrice || closePrice <= 0) continue
+
+    // Find nearest spot close (within ±1.5 days)
+    let spotAtTime = spotMap.get(openTime)
+    if (!spotAtTime) {
+      for (const [ts, price] of spotMap) {
+        if (Math.abs(ts - openTime) < 86_400_000 * 1.5) { spotAtTime = price; break }
+      }
+    }
+    if (!spotAtTime || spotAtTime <= 0) continue
+
+    const T = Math.max(0, (expiryMs - openTime) / (365 * 86_400_000))
+    if (T <= 0 || T > 0.5) continue
+
+    const iv = solveIV(closePrice, spotAtTime, strike, T, 'CALL')
+    if (iv > 5 && iv < 500) ivs.push(iv)
+  }
+  return ivs
+}
+
+// Chain expired + active contracts to reconstruct 180-day IV history
 async function bootstrapIVHistory(
   symbol: string,
   contracts: LiveContract[],
   currentPrice: number
 ): Promise<number[]> {
-  if (!contracts.length || currentPrice <= 0) return []
+  if (currentPrice <= 0) return []
+  const asset = symbol.replace('USDT', '')
+
   try {
-    // Pick the ATM call with ~20-40 DTE
-    const atm = contracts
-      .filter(c => c.underlying === symbol && c.type === 'CALL' && c.daysToExpiry >= 10 && c.daysToExpiry <= 45)
-      .sort((a, b) => Math.abs(a.strike - currentPrice) - Math.abs(b.strike - currentPrice))[0]
-    if (!atm) return []
-
-    // Fetch daily klines for that option symbol
-    const klines = await optionsGet<[number, string, string, string, string, ...unknown[]][]>(
-      '/klines', { symbol: atm.symbol, interval: '1d', limit: '90' }
-    )
-    if (klines.length < 5) return []
-
-    // Fetch spot klines for the same range
+    // Fetch spot klines once — shared across all contract lookups
     const spotKlines = await spotGet<[number, string, string, string, string, ...unknown[]][]>(
-      `/api/v3/klines?symbol=${symbol}&interval=1d&limit=90`
+      `/api/v3/klines?symbol=${symbol}&interval=1d&limit=180`
     )
-    const spotMap = new Map(spotKlines.map(k => [k[0], parseFloat(k[4] as string)]))
+    if (spotKlines.length < 5) return []
 
-    const expiryMs = new Date(atm.expiry).getTime()
-    const ivSeries: number[] = []
+    const allIVs: number[] = []
 
-    for (const k of klines) {
-      const openTime  = k[0] as number
-      const closePrice = parseFloat(k[4] as string)
-      if (!closePrice || closePrice <= 0) continue
-      const spotAtTime = spotMap.get(openTime)
-      if (!spotAtTime || spotAtTime <= 0) continue
-      const T = Math.max(0, (expiryMs - openTime) / (365 * 86_400_000))
-      if (T <= 0) continue
-      const iv = solveIV(closePrice, spotAtTime, atm.strike, T, 'CALL')
-      if (iv > 0 && iv < 500) ivSeries.push(iv)
+    // 1. Current active ATM contracts (up to 3 nearest expiries)
+    const activeExpiries = [...new Set(
+      contracts
+        .filter(c => c.underlying === symbol && c.type === 'CALL' && c.daysToExpiry >= 3)
+        .sort((a, b) => a.daysToExpiry - b.daysToExpiry)
+        .slice(0, 3)
+        .map(c => c.expiry)
+    )]
+
+    for (const expiry of activeExpiries) {
+      const atm = contracts
+        .filter(c => c.underlying === symbol && c.type === 'CALL' && c.expiry === expiry)
+        .sort((a, b) => Math.abs(a.strike - currentPrice) - Math.abs(b.strike - currentPrice))[0]
+      if (!atm) continue
+      const ivs = await ivSeriesFromSymbol(atm.symbol, atm.strike, new Date(atm.expiry).getTime(), spotKlines)
+      allIVs.push(...ivs)
     }
 
-    return ivSeries
+    // 2. Reconstruct past expired contracts — find past Fridays from spot klines
+    //    Binance options expire every Friday at 08:00 UTC
+    const pastFridays = spotKlines
+      .filter(k => new Date(k[0] as number).getUTCDay() === 5) // Friday
+      .map(k => ({ ts: k[0] as number, close: parseFloat(k[4] as string) }))
+      .filter(f => f.ts < Date.now() - 7 * 86_400_000) // only expired ones
+      .slice(-8) // last 8 expired Fridays (~2 months)
+
+    const expiredResults = await Promise.allSettled(
+      pastFridays.map(async ({ ts, close }) => {
+        const strike  = nearestStrike(close, asset)
+        const expCode = tsToExpiry(ts)
+        const optSym  = `${asset}-${expCode}-${strike}-C`
+        return ivSeriesFromSymbol(optSym, strike, ts, spotKlines)
+      })
+    )
+
+    for (const r of expiredResults) {
+      if (r.status === 'fulfilled') allIVs.push(...r.value)
+    }
+
+    return allIVs
   } catch {
     return []
   }

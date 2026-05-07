@@ -1,9 +1,13 @@
 {
   "functions": {
-    "api/proxy.js": {
-      "regions": ["sin1"]
-    }
+    "api/proxy.js": { "regions": ["sin1"] }
   },
+  "crons": [
+    {
+      "path": "/api/cron/iv-snapshot",
+      "schedule": "0 0 * * *"
+    }
+  ],
   "routes": [
     {
       "src": "/eapi/v1/(.*)",
