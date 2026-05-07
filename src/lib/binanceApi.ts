@@ -244,15 +244,18 @@ async function fetchIVRank(
   if (currentIV <= 0) return { rank: 0, source: 'insufficient' }
 
   try {
-    // Store current IV reading (non-blocking)
-    supabase.from('iv_history').insert({ symbol, iv30: currentIV }).then(() => {})
+    // Upsert one reading per symbol per day — on conflict update iv30 with latest
+    const today = new Date().toISOString().slice(0, 10)
+    supabase.from('iv_history')
+      .upsert({ symbol, iv30: currentIV, date: today }, { onConflict: 'symbol,date' })
+      .then(() => {})
 
     // Try Supabase history first
     const { data } = await supabase
       .from('iv_history')
       .select('iv30')
       .eq('symbol', symbol)
-      .order('recorded_at', { ascending: false })
+      .order('date', { ascending: false })
       .limit(252)
 
     if (data && data.length >= 30) {
