@@ -21,27 +21,15 @@ function buildPayoffData(s: Strategy) {
   for (let i = 0; i <= points; i++) {
     const spot = lo + i * step
     let pnl = 0
-    if (s.type === 'Covered Call') {
-      pnl = Math.min(s.legs[0].strike - price, spot - price) + s.legs[0].bid
-    } else if (s.type === 'Bull Call Spread') {
-      const longStrike = s.legs[0].strike
-      const shortStrike = s.legs[1].strike
-      const debit = s.netDebit
-      pnl = Math.max(0, Math.min(shortStrike, spot) - longStrike) - debit
-    } else if (s.type === 'Bear Put Spread') {
-      const longStrike = s.legs[0].strike
-      const shortStrike = s.legs[1].strike
-      const debit = s.netDebit
-      pnl = Math.max(0, longStrike - Math.max(shortStrike, spot)) - debit
+    if (s.type === 'Long Call') {
+      pnl = Math.max(0, spot - s.legs[0].strike) - s.netDebit
+    } else if (s.type === 'Long Put') {
+      pnl = Math.max(0, s.legs[0].strike - spot) - s.netDebit
     } else if (s.type === 'Long Straddle') {
       const strike = s.legs[0].strike
-      const debit = s.netDebit
-      pnl = Math.max(spot - strike, strike - spot) - debit
-    } else if (s.type === 'Iron Condor') {
-      const [bp, sp, sc, bc] = s.legs
-      const putPL = spot < sp.strike ? -(Math.min(sp.strike - spot, sp.strike - bp.strike)) : 0
-      const callPL = spot > sc.strike ? -(Math.min(spot - sc.strike, bc.strike - sc.strike)) : 0
-      pnl = s.netPremium + putPL + callPL
+      pnl = Math.max(spot - strike, strike - spot) - s.netDebit
+    } else if (s.type === 'Long Strangle') {
+      pnl = Math.max(0, spot - s.legs[0].strike) + Math.max(0, s.legs[1].strike - spot) - s.netDebit
     }
     data.push({ spot: +spot.toFixed(2), pnl: +pnl.toFixed(4) })
   }
@@ -72,77 +60,43 @@ function buildRationale(s: Strategy): Rationale {
   const beStr = beArr.map(b => fmtPrice(b)).join(' / ')
 
   switch (s.type) {
-    case 'Covered Call':
+    case 'Long Call':
       return {
-        why: `This Covered Call was selected because ${asset} is showing elevated Implied Volatility, making the short call premium rich relative to historical norms. By selling the ${fmtPrice(s.legs[0].strike)} call ${dte} days out, you collect ${fmtPrice(s.netPremium)} in immediate income while you hold the underlying — a ${((s.netPremium / price) * 100).toFixed(2)}% return on the position in ${dte} days if ${asset} stays below the strike.`,
+        why: `This Long Call on ${asset} gives you unlimited upside if ${asset} rallies above the breakeven at ${fmtPrice(beArr[0])} — a move of ${(((beArr[0] - price) / price) * 100).toFixed(1)}% from the current price. You pay ${fmtPrice(s.netDebit)} upfront: that is your total maximum loss, no matter what happens. The delta of ${s.legs[0].delta.toFixed(2)} means the option gains approximately ${(s.legs[0].delta * 100).toFixed(0)}¢ for every $1 ${asset} rises right now, and accelerates as the option moves further in-the-money.`,
         edge: [
-          `Premium of ${fmtPrice(s.netPremium)} collected upfront — this is yours to keep regardless of outcome`,
-          `${pop}% probability the call expires worthless and you keep the full premium`,
-          `Breakeven is ${fmtPrice(beArr[0])} — you profit as long as ${asset} stays above this price`,
-          `Theta (time decay) works in your favour every day the position is open`,
+          `Unlimited profit potential — every dollar above ${fmtPrice(beArr[0])} is pure gain`,
+          `Risk is strictly capped at the ${fmtPrice(s.netDebit)} premium paid — nothing more`,
+          `Delta of ${s.legs[0].delta.toFixed(2)}: gains ~${(s.legs[0].delta * 100).toFixed(0)}¢ per $1 rise in ${asset}`,
+          `${pop}% probability of finishing in-the-money at expiry`,
         ],
         risks: [
-          `Upside is capped at ${fmtPrice(s.maxProfit)} — if ${asset} rallies hard past the strike, you miss gains`,
-          `You still hold the underlying, so a sharp decline in ${asset} is the real risk`,
-          `If IV drops sharply, you could buy the call back cheaper and roll, but premium shrinks`,
+          `Full debit of ${fmtPrice(s.netDebit)} is lost if ${asset} stays at or below ${fmtPrice(s.legs[0].strike)} at expiry`,
+          `Theta decay works against you every day — the option loses time value even if price is flat`,
+          `IV crush after a catalyst can reduce option value even if ${asset} moves higher`,
         ],
-        ideal: `Ideal when you are neutral-to-moderately bullish on ${asset} and want to generate income. Best entered when IVR > 50 to ensure you're selling rich premium. Roll the call higher or out in time if ${asset} approaches the strike before expiry.`,
+        ideal: `Enter when you expect ${asset} to make a strong directional move higher within ${dte} days. Consider taking partial profits at 50–100% gain on the option rather than holding to expiry. If ${asset} moves quickly in your direction, close early to lock in gains and sidestep accelerating theta.`,
       }
 
-    case 'Cash-Secured Put':
+    case 'Long Put':
       return {
-        why: `A Cash-Secured Put on ${asset} at the ${fmtPrice(s.legs[0].strike)} strike was surfaced because the put premium is inflated by elevated IV, and the strike sits ${((1 - s.legs[0].strike / price) * 100).toFixed(1)}% below current price — offering a built-in margin of safety. You're effectively getting paid ${fmtPrice(s.netPremium)} to agree to buy ${asset} at a discount.`,
+        why: `This Long Put on ${asset} profits if the price falls below the breakeven at ${fmtPrice(beArr[0])}. You pay ${fmtPrice(s.netDebit)} — your maximum loss — and in return you hold the right to profit on every dollar ${asset} falls below ${fmtPrice(s.legs[0].strike)}. If ${asset} were to fall to zero, the theoretical maximum profit would be ${fmtPrice(s.maxProfit)}. The delta of ${s.legs[0].delta.toFixed(2)} means the option gains approximately ${(Math.abs(s.legs[0].delta) * 100).toFixed(0)}¢ for every $1 ${asset} drops right now.`,
         edge: [
-          `Collect ${fmtPrice(s.netPremium)} immediately — your effective buy price if assigned is ${fmtPrice(s.breakeven as number)}`,
-          `${pop}% chance the put expires worthless and you keep the full premium`,
-          `Strike is ${((1 - s.legs[0].strike / price) * 100).toFixed(1)}% OTM — ${asset} must fall significantly before you take a loss`,
-          `Defined max profit from day one`,
+          `Defined max loss of ${fmtPrice(s.netDebit)} — risk is fully bounded from the moment you enter`,
+          `Substantial profit potential if ${asset} falls — theoretical max ${fmtPrice(s.maxProfit)}`,
+          `Delta of ${s.legs[0].delta.toFixed(2)}: gains ~${(Math.abs(s.legs[0].delta) * 100).toFixed(0)}¢ per $1 drop in ${asset}`,
+          `${pop}% probability of finishing in-the-money at expiry`,
         ],
         risks: [
-          `If ${asset} falls below ${fmtPrice(s.legs[0].strike)}, you are assigned and must buy at that price`,
-          `Maximum loss is ${fmtPrice(s.maxLoss)} (strike minus premium) if ${asset} goes to zero`,
-          `Capital must be held in reserve to cover potential assignment`,
+          `Full premium of ${fmtPrice(s.netDebit)} is lost if ${asset} stays at or above ${fmtPrice(s.legs[0].strike)} at expiry`,
+          `Theta decay works against you every day — position loses time value without a move`,
+          `A sharp reversal higher after entry quickly erodes option value`,
         ],
-        ideal: `Best used when you actually want to own ${asset} at a lower price and would be comfortable holding it. Enter when IVR is elevated (>50) for maximum premium. Have the collateral ready — treat it as a limit buy order that pays you while you wait.`,
-      }
-
-    case 'Bull Call Spread':
-      return {
-        why: `This Bull Call Spread targets a controlled upside move in ${asset} with strictly defined risk. The spread costs ${fmtPrice(s.netDebit)} (your max loss) and delivers up to ${fmtPrice(s.maxProfit)} profit — a ${rr.toFixed(2)}x return on risk — if ${asset} closes above ${fmtPrice(s.legs[1].strike)} at expiry in ${dte} days. It was selected because the current price is close to the long strike, giving a realistic path to full profit.`,
-        edge: [
-          `Max loss is strictly limited to the ${fmtPrice(s.netDebit)} debit paid — no surprises`,
-          `${rr.toFixed(2)}x R/R: risk ${fmtPrice(s.netDebit)} to make ${fmtPrice(s.maxProfit)}`,
-          `Less capital at risk than buying a naked call`,
-          `The short call at ${fmtPrice(s.legs[1].strike)} partially offsets the cost of the long call`,
-        ],
-        risks: [
-          `Full debit of ${fmtPrice(s.netDebit)} is lost if ${asset} closes at or below ${fmtPrice(s.legs[0].strike)} at expiry`,
-          `Profit is capped at ${fmtPrice(s.maxProfit)} — a strong rally above ${fmtPrice(s.legs[1].strike)} won't help further`,
-          `Time decay hurts the position if ${asset} doesn't move quickly enough`,
-        ],
-        ideal: `Enter when you expect ${asset} to move moderately higher over the next ${dte} days. You don't need a massive rally — just a move above ${fmtPrice(beArr[0])} to start profiting. Consider closing at 50–75% of max profit rather than holding to expiry.`,
-      }
-
-    case 'Bear Put Spread':
-      return {
-        why: `This Bear Put Spread profits if ${asset} declines moderately from its current ${fmtPrice(price)} level. Costing ${fmtPrice(s.netDebit)}, it pays up to ${fmtPrice(s.maxProfit)} if ${asset} falls below ${fmtPrice(s.legs[1].strike)} in ${dte} days — a ${rr.toFixed(2)}x return on risk. The spread structure caps both profit and loss, making it far more capital-efficient than a naked put for a directional bearish view.`,
-        edge: [
-          `Defined risk of ${fmtPrice(s.netDebit)} — worst case is clearly bounded`,
-          `${rr.toFixed(2)}x R/R ratio on a moderately bearish outlook`,
-          `The short put at ${fmtPrice(s.legs[1].strike)} lowers your cost basis vs buying a put outright`,
-          `Breakeven at ${beStr} — only needs a modest decline to begin profiting`,
-        ],
-        risks: [
-          `Full debit is lost if ${asset} stays at or above ${fmtPrice(s.legs[0].strike)}`,
-          `Upside is capped — a catastrophic crash pays no more than ${fmtPrice(s.maxProfit)}`,
-          `Needs ${asset} to move down within ${dte} days, so timing matters`,
-        ],
-        ideal: `Use when you have a moderately bearish thesis — a news catalyst, technical resistance, or macro headwind — rather than expecting a crash. Target closing at 50–75% of max profit. IV expansion after entry works in your favour; IV crush works against you.`,
+        ideal: `Use when you have a bearish thesis on ${asset} — a technical breakdown, negative catalyst, or macro headwind. Consider closing at 50–100% profit rather than holding to expiry. If ${asset} makes a sharp quick drop, close early and capture gains before time decay accelerates.`,
       }
 
     case 'Long Straddle':
       return {
-        why: `This Long Straddle on ${asset} was selected because it profits from a large move in either direction — perfect when a major catalyst is imminent but direction is uncertain. By buying the ATM call and put at ${fmtPrice(s.legs[0].strike)}, you need ${asset} to move more than ${fmtPrice(beArr[1] - s.legs[0].strike)} (${(((beArr[1] - s.legs[0].strike) / price) * 100).toFixed(1)}%) in either direction within ${dte} days to break even.`,
+        why: `This Long Straddle on ${asset} profits from a large move in either direction — ideal when a major catalyst is imminent but direction is uncertain. By buying the ATM call and put at ${fmtPrice(s.legs[0].strike)}, you need ${asset} to move more than ${fmtPrice(beArr[1] - s.legs[0].strike)} (${(((beArr[1] - s.legs[0].strike) / price) * 100).toFixed(1)}%) in either direction within ${dte} days to break even. Both legs are long — there is no short position, making this fully compatible with buy-only accounts.`,
         edge: [
           `Profits from ANY large move — up or down`,
           `Unlimited profit potential in either direction`,
@@ -158,26 +112,27 @@ function buildRationale(s: Strategy): Rationale {
         ideal: `Enter 1–2 weeks before a known catalyst and close shortly after the event, before theta decay becomes dominant. Avoid holding through expiry unless you have high conviction on a sustained large move. Consider closing one leg and letting the other run if ${asset} moves strongly in one direction.`,
       }
 
-    case 'Iron Condor':
+    case 'Long Strangle':
       return {
-        why: `This Iron Condor collects ${fmtPrice(s.netPremium)} in premium by defining a profit zone where ${asset} needs to stay between ${beStr} over the next ${dte} days — a range of ${(((beArr[1] - beArr[0]) / price) * 100).toFixed(1)}% in either direction. It was selected because elevated IV is making both the short call and put premium rich, and a range-bound period is likely following recent volatility.`,
+        why: `This Long Strangle buys an OTM call at ${fmtPrice(s.legs[0].strike)} and an OTM put at ${fmtPrice(s.legs[1].strike)} for a total cost of ${fmtPrice(s.netDebit)} — significantly cheaper than an ATM straddle. It profits from a large move in either direction, needing ${asset} to breach ${fmtPrice(beArr[0])} on the downside or ${fmtPrice(beArr[1])} on the upside within ${dte} days. Both legs are long — no short selling required.`,
         edge: [
-          `Collects ${fmtPrice(s.netPremium)} upfront — max profit if ${asset} stays in the tent`,
-          `${pop}% probability of profit — the highest-probability structure available`,
-          `Profits from IV crush — if IV drops after entry, you can close early for a profit`,
-          `Four legs means risk is strictly bounded on both sides`,
+          `Cheaper than a straddle — lower upfront cost with similar unlimited upside exposure`,
+          `Profits from any large move in either direction — no directional bias needed`,
+          `Lower cost means higher percentage returns on a big move`,
+          `Unlimited profit potential once either breakeven is breached`,
         ],
         risks: [
-          `Max loss of ${fmtPrice(s.maxLoss)} if ${asset} breaches either wing strike`,
-          `A large directional move or IV spike post-entry is the main risk`,
-          `Management is required if ${asset} tests one of the short strikes`,
+          `Needs a larger move than a straddle — both wings are OTM, so the breakevens are wider`,
+          `Full debit of ${fmtPrice(s.netDebit)} is lost if ${asset} stays between ${beStr} at expiry`,
+          `Theta decay is aggressive — loses value daily without a move`,
+          `IV crush after an event can hurt even if price moves only modestly`,
         ],
-        ideal: `Enter when IVR > 60 and you expect low volatility. Target closing at 50% of max profit to reduce time in the trade. If ${asset} moves toward one of the short strikes, consider rolling that side further out-of-the-money or widening the untested side for a credit.`,
+        ideal: `Best used ahead of high-impact events when you expect a large move but aren't sure of direction. The OTM structure makes it cheaper than a straddle but requires a bigger move to profit. Close one leg when ${asset} makes a decisive move and let the other run, or close both after the catalyst to avoid IV crush.`,
       }
 
     default:
       return {
-        why: `This ${s.type} strategy on ${asset} offers a ${pop}% probability of profit with a ${rr === 999 ? 'unlimited' : rr.toFixed(2) + 'x'} risk/reward ratio over the next ${dte} days.`,
+        why: `This ${s.type} strategy on ${asset} offers a ${pop}% probability of profit with ${rr === 999 ? 'unlimited' : rr.toFixed(2) + 'x'} risk/reward over the next ${dte} days.`,
         edge: [`${pop}% probability of profit`, `Breakeven at ${beStr}`],
         risks: [`Max loss: ${s.maxLoss === Infinity ? 'unlimited' : fmtPrice(s.maxLoss)}`],
         ideal: `Review the payoff diagram to understand the full range of outcomes before entering.`,
