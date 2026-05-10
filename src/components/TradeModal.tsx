@@ -36,11 +36,8 @@ export function TradeModal({ strategy: s, onClose }: Props) {
 
   type LegDir = { symbol: string; side: 'BUY' | 'SELL'; price: number; label: string; optionSide: 'CALL' | 'PUT'; strike: number }
   function getLegs(): LegDir[] {
-    return s!.legs.map((leg, i) => {
-      let side: 'BUY' | 'SELL' = 'BUY'
-      if (s!.type === 'Covered Call' || s!.type === 'Cash-Secured Put') side = 'SELL'
-      else if (i === 1) side = 'SELL'
-      else if (s!.type === 'Iron Condor' && (i === 1 || i === 2)) side = 'SELL'
+    return s!.legs.map((leg) => {
+      const side: 'BUY' | 'SELL' = 'BUY'
       const mid = leg.bid > 0 && leg.ask > 0 ? (leg.bid + leg.ask) / 2 : leg.last
       return {
         symbol: leg.symbol,

@@ -1,31 +1,25 @@
 import type { LiveContract, LiveAsset } from './binanceApi'
 import type { Strategy } from '../data/mockData'
 
-let idCounter = 0
-function uid() { return `live-${idCounter++}` }
-
 function mid(c: LiveContract) {
   if (c.bid > 0 && c.ask > 0) return (c.bid + c.ask) / 2
   return c.markPrice || c.last || 0
 }
 
-
 function score(rr: number, pop: number, dte: number): number {
-  // Higher PoP + better R/R + optimal DTE (21-45 days)
   const dteMod = dte >= 14 && dte <= 45 ? 1 : dte >= 7 ? 0.85 : 0.7
   const rrMod  = Math.min(rr / 3, 1)
   const popMod = pop / 100
   return Math.min(99, Math.round((popMod * 0.5 + rrMod * 0.3 + dteMod * 0.2) * 100))
 }
 
-// Find ATM or nearest-to-ATM contract for a given underlying/type/expiry
 function nearATM(
   contracts: LiveContract[],
   underlying: string,
   type: 'CALL' | 'PUT',
   expiry: string,
   price: number,
-  deltaTgt?: number,  // e.g. 0.3 for 30-delta
+  deltaTgt?: number,
 ): LiveContract | undefined {
   const pool = contracts.filter(
     c => c.underlying === underlying && c.type === type && c.expiry === expiry && mid(c) > 0
@@ -47,7 +41,7 @@ function otmContract(
   type: 'CALL' | 'PUT',
   expiry: string,
   price: number,
-  pctFromPrice: number,   // e.g. 0.05 = 5% OTM
+  pctFromPrice: number,
 ): LiveContract | undefined {
   const target = type === 'CALL' ? price * (1 + pctFromPrice) : price * (1 - pctFromPrice)
   const pool = contracts.filter(
@@ -66,129 +60,119 @@ export function buildStrategies(assets: LiveAsset[]): Strategy[] {
     const { contracts, expiryDates, price } = asset
     if (!price || !expiryDates.length) continue
 
-    // Use the 2nd-nearest expiry for most strategies (better theta decay range)
-    const expiry1 = expiryDates[0]
     const expiry2 = expiryDates[1] ?? expiryDates[0]
     const expiry3 = expiryDates[2] ?? expiry2
 
-    // ── 1. Covered Call (short 30-delta call) ──────────────────────────
-    const ccShort = otmContract(contracts, asset.symbol, 'CALL', expiry2, price, 0.05)
-    if (ccShort && mid(ccShort) > 0) {
-      const premium = mid(ccShort)
-      const maxProfit = +(ccShort.strike - price + premium).toFixed(4)
-      const maxLoss   = +(price - premium).toFixed(4)
-      const be        = +(price - premium).toFixed(4)
-      const rr        = +(maxProfit / maxLoss).toFixed(2)
-      const p         = +(100 - Math.abs(ccShort.delta) * 100).toFixed(1)
+    // ── 1. Long Call (ATM) ─────────────────────────────────────────────
+    const lcAtm = nearATM(contracts, asset.symbol, 'CALL', expiry2, price, 0.50)
+    if (lcAtm && mid(lcAtm) > 0) {
+      const debit = +mid(lcAtm).toFixed(4)
+      const be    = +(lcAtm.strike + debit).toFixed(4)
+      const pop   = +(Math.abs(lcAtm.delta) * 100).toFixed(1)
       all.push({
-        id: uid(), symbol: asset.symbol, type: 'Covered Call',
-        legs: [ccShort as any],
-        maxProfit, maxLoss, breakeven: be,
-        riskRewardRatio: rr, probabilityOfProfit: p,
-        netPremium: +premium.toFixed(4), netDebit: 0,
-        score: score(rr, p, ccShort.daysToExpiry),
+        id: `${asset.symbol}-long-call-atm-${expiry2}`,
+        symbol: asset.symbol, type: 'Long Call',
+        legs: [lcAtm as any],
+        maxProfit: Infinity, maxLoss: debit,
+        breakeven: be,
+        riskRewardRatio: 999, probabilityOfProfit: +pop,
+        netPremium: 0, netDebit: debit,
+        score: score(999, +pop, lcAtm.daysToExpiry),
         sentiment: 'Bullish', expiry: expiry2,
-        daysToExpiry: ccShort.daysToExpiry,
+        daysToExpiry: lcAtm.daysToExpiry,
         underlyingPrice: price,
-        tags: ['Income', 'Low Risk'],
+        tags: ['Unlimited Upside', 'Bullish'],
       })
     }
 
-    // ── 2. Cash-Secured Put ────────────────────────────────────────────
-    const cspShort = otmContract(contracts, asset.symbol, 'PUT', expiry2, price, 0.05)
-    if (cspShort && mid(cspShort) > 0) {
-      const premium = mid(cspShort)
-      const maxProfit = +premium.toFixed(4)
-      const maxLoss   = +(cspShort.strike - premium).toFixed(4)
-      const be        = +(cspShort.strike - premium).toFixed(4)
-      const rr        = +(maxProfit / maxLoss).toFixed(4)
-      const p         = +((1 - Math.abs(cspShort.delta)) * 100).toFixed(1)
+    // ── 2. Long Call (OTM ~5%) ─────────────────────────────────────────
+    const lcOtm = otmContract(contracts, asset.symbol, 'CALL', expiry2, price, 0.05)
+    if (lcOtm && mid(lcOtm) > 0 && lcOtm.strike !== lcAtm?.strike) {
+      const debit = +mid(lcOtm).toFixed(4)
+      const be    = +(lcOtm.strike + debit).toFixed(4)
+      const pop   = +(Math.abs(lcOtm.delta) * 100).toFixed(1)
       all.push({
-        id: uid(), symbol: asset.symbol, type: 'Cash-Secured Put',
-        legs: [cspShort as any],
-        maxProfit, maxLoss, breakeven: be,
-        riskRewardRatio: rr, probabilityOfProfit: p,
-        netPremium: +premium.toFixed(4), netDebit: 0,
-        score: score(rr, p, cspShort.daysToExpiry),
+        id: `${asset.symbol}-long-call-otm-${expiry2}`,
+        symbol: asset.symbol, type: 'Long Call',
+        legs: [lcOtm as any],
+        maxProfit: Infinity, maxLoss: debit,
+        breakeven: be,
+        riskRewardRatio: 999, probabilityOfProfit: +pop,
+        netPremium: 0, netDebit: debit,
+        score: score(999, +pop, lcOtm.daysToExpiry),
         sentiment: 'Bullish', expiry: expiry2,
-        daysToExpiry: cspShort.daysToExpiry,
+        daysToExpiry: lcOtm.daysToExpiry,
         underlyingPrice: price,
-        tags: ['Income', 'Defined Risk'],
+        tags: ['High Leverage', 'Bullish'],
       })
     }
 
-    // ── 3. Bull Call Spread ────────────────────────────────────────────
-    const bcLong  = nearATM(contracts, asset.symbol, 'CALL', expiry2, price, 0.50)
-    const bcShort = otmContract(contracts, asset.symbol, 'CALL', expiry2, price, 0.06)
-    if (bcLong && bcShort && bcShort.strike > bcLong.strike) {
-      const debit     = +(mid(bcLong) - mid(bcShort)).toFixed(4)
-      const width     = bcShort.strike - bcLong.strike
-      const maxProfit = +(width - debit).toFixed(4)
-      const maxLoss   = debit
-      const be        = +(bcLong.strike + debit).toFixed(4)
-      const rr        = +(maxProfit / maxLoss).toFixed(2)
-      const p         = +(bcLong.delta * 100).toFixed(1)
-      if (debit > 0 && maxProfit > 0) {
-        all.push({
-          id: uid(), symbol: asset.symbol, type: 'Bull Call Spread',
-          legs: [bcLong as any, bcShort as any],
-          maxProfit, maxLoss, breakeven: be,
-          riskRewardRatio: rr, probabilityOfProfit: p,
-          netPremium: 0, netDebit: debit,
-          score: score(rr, p, bcLong.daysToExpiry),
-          sentiment: 'Bullish', expiry: expiry2,
-          daysToExpiry: bcLong.daysToExpiry,
-          underlyingPrice: price,
-          tags: ['Defined Risk', 'Bullish'],
-        })
-      }
+    // ── 3. Long Put (ATM) ──────────────────────────────────────────────
+    const lpAtm = nearATM(contracts, asset.symbol, 'PUT', expiry2, price, 0.50)
+    if (lpAtm && mid(lpAtm) > 0) {
+      const debit     = +mid(lpAtm).toFixed(4)
+      const be        = +(lpAtm.strike - debit).toFixed(4)
+      const pop       = +(Math.abs(lpAtm.delta) * 100).toFixed(1)
+      const maxProfit = +(lpAtm.strike - debit).toFixed(4)
+      const rr        = +(maxProfit / debit).toFixed(2)
+      all.push({
+        id: `${asset.symbol}-long-put-atm-${expiry2}`,
+        symbol: asset.symbol, type: 'Long Put',
+        legs: [lpAtm as any],
+        maxProfit, maxLoss: debit,
+        breakeven: be,
+        riskRewardRatio: rr, probabilityOfProfit: +pop,
+        netPremium: 0, netDebit: debit,
+        score: score(rr, +pop, lpAtm.daysToExpiry),
+        sentiment: 'Bearish', expiry: expiry2,
+        daysToExpiry: lpAtm.daysToExpiry,
+        underlyingPrice: price,
+        tags: ['Bearish', 'Defined Risk'],
+      })
     }
 
-    // ── 4. Bear Put Spread ─────────────────────────────────────────────
-    const bpLong  = nearATM(contracts, asset.symbol, 'PUT', expiry1, price, 0.50)
-    const bpShort = otmContract(contracts, asset.symbol, 'PUT', expiry1, price, 0.06)
-    if (bpLong && bpShort && bpShort.strike < bpLong.strike) {
-      const debit     = +(mid(bpLong) - mid(bpShort)).toFixed(4)
-      const width     = bpLong.strike - bpShort.strike
-      const maxProfit = +(width - debit).toFixed(4)
-      const maxLoss   = debit
-      const be        = +(bpLong.strike - debit).toFixed(4)
-      const rr        = +(maxProfit / maxLoss).toFixed(2)
-      const p         = +(Math.abs(bpLong.delta) * 100).toFixed(1)
-      if (debit > 0 && maxProfit > 0) {
-        all.push({
-          id: uid(), symbol: asset.symbol, type: 'Bear Put Spread',
-          legs: [bpLong as any, bpShort as any],
-          maxProfit, maxLoss, breakeven: be,
-          riskRewardRatio: rr, probabilityOfProfit: p,
-          netPremium: 0, netDebit: debit,
-          score: score(rr, p, bpLong.daysToExpiry),
-          sentiment: 'Bearish', expiry: expiry1,
-          daysToExpiry: bpLong.daysToExpiry,
-          underlyingPrice: price,
-          tags: ['Defined Risk', 'Bearish'],
-        })
-      }
+    // ── 4. Long Put (OTM ~5%) ──────────────────────────────────────────
+    const lpOtm = otmContract(contracts, asset.symbol, 'PUT', expiry2, price, 0.05)
+    if (lpOtm && mid(lpOtm) > 0 && lpOtm.strike !== lpAtm?.strike) {
+      const debit     = +mid(lpOtm).toFixed(4)
+      const be        = +(lpOtm.strike - debit).toFixed(4)
+      const pop       = +(Math.abs(lpOtm.delta) * 100).toFixed(1)
+      const maxProfit = +(lpOtm.strike - debit).toFixed(4)
+      const rr        = +(maxProfit / debit).toFixed(2)
+      all.push({
+        id: `${asset.symbol}-long-put-otm-${expiry2}`,
+        symbol: asset.symbol, type: 'Long Put',
+        legs: [lpOtm as any],
+        maxProfit, maxLoss: debit,
+        breakeven: be,
+        riskRewardRatio: rr, probabilityOfProfit: +pop,
+        netPremium: 0, netDebit: debit,
+        score: score(rr, +pop, lpOtm.daysToExpiry),
+        sentiment: 'Bearish', expiry: expiry2,
+        daysToExpiry: lpOtm.daysToExpiry,
+        underlyingPrice: price,
+        tags: ['High Leverage', 'Bearish'],
+      })
     }
 
     // ── 5. Long Straddle ──────────────────────────────────────────────
     const strCall = nearATM(contracts, asset.symbol, 'CALL', expiry2, price)
     const strPut  = nearATM(contracts, asset.symbol, 'PUT',  expiry2, price)
     if (strCall && strPut) {
-      const debit    = +(mid(strCall) + mid(strPut)).toFixed(4)
-      const maxLoss  = debit
-      const beUp     = +(strCall.strike + debit).toFixed(4)
-      const beDown   = +(strPut.strike - debit).toFixed(4)
-      const p        = +(Math.abs(strCall.delta - strPut.delta) * 30 + 30).toFixed(1) // rough
+      const debit  = +(mid(strCall) + mid(strPut)).toFixed(4)
+      const beUp   = +(strCall.strike + debit).toFixed(4)
+      const beDown = +(strPut.strike - debit).toFixed(4)
+      const pop    = +(Math.abs(strCall.delta - strPut.delta) * 30 + 30).toFixed(1)
       if (debit > 0) {
         all.push({
-          id: uid(), symbol: asset.symbol, type: 'Long Straddle',
+          id: `${asset.symbol}-long-straddle-${expiry2}`,
+          symbol: asset.symbol, type: 'Long Straddle',
           legs: [strCall as any, strPut as any],
-          maxProfit: Infinity, maxLoss,
+          maxProfit: Infinity, maxLoss: debit,
           breakeven: [beDown, beUp],
-          riskRewardRatio: 999, probabilityOfProfit: p,
+          riskRewardRatio: 999, probabilityOfProfit: +pop,
           netPremium: 0, netDebit: debit,
-          score: score(3, p, strCall.daysToExpiry),
+          score: score(999, +pop, strCall.daysToExpiry),
           sentiment: 'Neutral', expiry: expiry2,
           daysToExpiry: strCall.daysToExpiry,
           underlyingPrice: price,
@@ -197,36 +181,28 @@ export function buildStrategies(assets: LiveAsset[]): Strategy[] {
       }
     }
 
-    // ── 6. Iron Condor ─────────────────────────────────────────────────
-    const icBuyPut  = otmContract(contracts, asset.symbol, 'PUT',  expiry3, price, 0.12)
-    const icSellPut = otmContract(contracts, asset.symbol, 'PUT',  expiry3, price, 0.07)
-    const icSellCall= otmContract(contracts, asset.symbol, 'CALL', expiry3, price, 0.07)
-    const icBuyCall = otmContract(contracts, asset.symbol, 'CALL', expiry3, price, 0.12)
-
-    if (icBuyPut && icSellPut && icSellCall && icBuyCall
-      && icSellPut.strike > icBuyPut.strike
-      && icBuyCall.strike > icSellCall.strike) {
-      const premium  = +((mid(icSellPut) - mid(icBuyPut)) + (mid(icSellCall) - mid(icBuyCall))).toFixed(4)
-      const width    = icSellPut.strike - icBuyPut.strike
-      const maxLoss  = +(width - premium).toFixed(4)
-      const rr       = premium > 0 && maxLoss > 0 ? +(premium / maxLoss).toFixed(3) : 0
-      const p        = +((1 - Math.abs(icSellPut.delta) - Math.abs(icSellCall.delta)) * 100).toFixed(1)
-      if (premium > 0 && maxLoss > 0) {
+    // ── 6. Long Strangle (OTM ~5%) ────────────────────────────────────
+    const strgCall = otmContract(contracts, asset.symbol, 'CALL', expiry3, price, 0.05)
+    const strgPut  = otmContract(contracts, asset.symbol, 'PUT',  expiry3, price, 0.05)
+    if (strgCall && strgPut && mid(strgCall) > 0 && mid(strgPut) > 0) {
+      const debit  = +(mid(strgCall) + mid(strgPut)).toFixed(4)
+      const beUp   = +(strgCall.strike + debit).toFixed(4)
+      const beDown = +(strgPut.strike - debit).toFixed(4)
+      const pop    = +(Math.abs(strgCall.delta - strgPut.delta) * 25 + 25).toFixed(1)
+      if (debit > 0) {
         all.push({
-          id: uid(), symbol: asset.symbol, type: 'Iron Condor',
-          legs: [icBuyPut as any, icSellPut as any, icSellCall as any, icBuyCall as any],
-          maxProfit: premium, maxLoss,
-          breakeven: [
-            +(icSellPut.strike - premium).toFixed(4),
-            +(icSellCall.strike + premium).toFixed(4),
-          ],
-          riskRewardRatio: rr, probabilityOfProfit: Math.max(50, p),
-          netPremium: premium, netDebit: 0,
-          score: score(rr, Math.max(50, p), icSellPut.daysToExpiry),
+          id: `${asset.symbol}-long-strangle-${expiry3}`,
+          symbol: asset.symbol, type: 'Long Strangle',
+          legs: [strgCall as any, strgPut as any],
+          maxProfit: Infinity, maxLoss: debit,
+          breakeven: [beDown, beUp],
+          riskRewardRatio: 999, probabilityOfProfit: +pop,
+          netPremium: 0, netDebit: debit,
+          score: score(999, +pop, strgCall.daysToExpiry),
           sentiment: 'Neutral', expiry: expiry3,
-          daysToExpiry: icSellPut.daysToExpiry,
+          daysToExpiry: strgCall.daysToExpiry,
           underlyingPrice: price,
-          tags: ['Range Bound', 'High Probability'],
+          tags: ['Volatility Play', 'Cheaper than Straddle'],
         })
       }
     }

@@ -3,13 +3,10 @@ import { TrendingUp, TrendingDown, Minus, Target, Shield, Zap } from 'lucide-rea
 import type { Strategy } from '../data/mockData'
 
 const BADGE_CLASS: Record<string, string> = {
-  'Covered Call': 'strategy-badge-covered-call',
-  'Bull Call Spread': 'strategy-badge-bull-spread',
-  'Bear Put Spread': 'strategy-badge-bear-spread',
-  'Long Straddle': 'strategy-badge-straddle',
-  'Iron Condor': 'strategy-badge-iron-condor',
-  'Cash-Secured Put': 'strategy-badge-covered-call',
-  'Protective Put': 'strategy-badge-bear-spread',
+  'Long Call':    'strategy-badge-bull-spread',
+  'Long Put':     'strategy-badge-bear-spread',
+  'Long Straddle':'strategy-badge-straddle',
+  'Long Strangle':'strategy-badge-iron-condor',
 }
 
 const SENTIMENT_ICON = {

@@ -20,13 +20,10 @@ export interface OptionContract {
 }
 
 export type StrategyType =
-  | 'Covered Call'
-  | 'Bull Call Spread'
-  | 'Bear Put Spread'
+  | 'Long Call'
+  | 'Long Put'
   | 'Long Straddle'
-  | 'Iron Condor'
-  | 'Cash-Secured Put'
-  | 'Protective Put'
+  | 'Long Strangle'
 
 export interface Strategy {
   id: string
@@ -115,76 +112,51 @@ function generateStrategies(): Strategy[] {
     const price = asset.price
     const iv = asset.iv30
 
-    // Covered Call
-    const cc = makeContract(asset.symbol, Math.round(price * 1.05), 'CALL', EXPIRIES[1], price, iv)
+    // Long Call (ATM)
+    const lc = makeContract(asset.symbol, Math.round(price), 'CALL', EXPIRIES[2], price, iv)
+    const lcDebit = +lc.ask.toFixed(2)
     strategies.push({
       id: `s${id++}`,
       symbol: asset.symbol,
-      type: 'Covered Call',
-      legs: [cc],
-      maxProfit: +(cc.bid * 1 + (cc.strike - price)).toFixed(2),
-      maxLoss: +(price - cc.bid).toFixed(2),
-      breakeven: +(price - cc.bid).toFixed(2),
-      riskRewardRatio: +(cc.bid / price * 20).toFixed(2),
-      probabilityOfProfit: +(Math.random() * 20 + 65).toFixed(1),
-      netPremium: cc.bid,
-      netDebit: 0,
-      score: Math.floor(Math.random() * 25 + 70),
-      sentiment: 'Bullish',
-      expiry: EXPIRIES[1],
-      daysToExpiry: daysUntil(EXPIRIES[1]),
-      underlyingPrice: price,
-      tags: ['Income', 'Low Risk'],
-    })
-
-    // Bull Call Spread
-    const bcLong = makeContract(asset.symbol, Math.round(price * 0.99), 'CALL', EXPIRIES[2], price, iv)
-    const bcShort = makeContract(asset.symbol, Math.round(price * 1.06), 'CALL', EXPIRIES[2], price, iv)
-    const bcDebit = +(bcLong.ask - bcShort.bid).toFixed(2)
-    const bcWidth = bcShort.strike - bcLong.strike
-    strategies.push({
-      id: `s${id++}`,
-      symbol: asset.symbol,
-      type: 'Bull Call Spread',
-      legs: [bcLong, bcShort],
-      maxProfit: +(bcWidth - bcDebit).toFixed(2),
-      maxLoss: bcDebit,
-      breakeven: +(bcLong.strike + bcDebit).toFixed(2),
-      riskRewardRatio: +((bcWidth - bcDebit) / bcDebit).toFixed(2),
-      probabilityOfProfit: +(Math.random() * 15 + 50).toFixed(1),
+      type: 'Long Call',
+      legs: [lc],
+      maxProfit: Infinity,
+      maxLoss: lcDebit,
+      breakeven: +(lc.strike + lcDebit).toFixed(2),
+      riskRewardRatio: 999,
+      probabilityOfProfit: +(Math.random() * 10 + 45).toFixed(1),
       netPremium: 0,
-      netDebit: bcDebit,
-      score: Math.floor(Math.random() * 20 + 65),
+      netDebit: lcDebit,
+      score: Math.floor(Math.random() * 15 + 68),
       sentiment: 'Bullish',
       expiry: EXPIRIES[2],
       daysToExpiry: daysUntil(EXPIRIES[2]),
       underlyingPrice: price,
-      tags: ['Defined Risk', 'Bullish'],
+      tags: ['Unlimited Upside', 'Bullish'],
     })
 
-    // Bear Put Spread
-    const bpLong = makeContract(asset.symbol, Math.round(price * 1.01), 'PUT', EXPIRIES[1], price, iv)
-    const bpShort = makeContract(asset.symbol, Math.round(price * 0.94), 'PUT', EXPIRIES[1], price, iv)
-    const bpDebit = +(bpLong.ask - bpShort.bid).toFixed(2)
-    const bpWidth = bpLong.strike - bpShort.strike
+    // Long Put (ATM)
+    const lp = makeContract(asset.symbol, Math.round(price), 'PUT', EXPIRIES[2], price, iv)
+    const lpDebit = +lp.ask.toFixed(2)
+    const lpMaxProfit = +(lp.strike - lpDebit).toFixed(2)
     strategies.push({
       id: `s${id++}`,
       symbol: asset.symbol,
-      type: 'Bear Put Spread',
-      legs: [bpLong, bpShort],
-      maxProfit: +(bpWidth - bpDebit).toFixed(2),
-      maxLoss: bpDebit,
-      breakeven: +(bpLong.strike - bpDebit).toFixed(2),
-      riskRewardRatio: +((bpWidth - bpDebit) / bpDebit).toFixed(2),
-      probabilityOfProfit: +(Math.random() * 15 + 45).toFixed(1),
+      type: 'Long Put',
+      legs: [lp],
+      maxProfit: lpMaxProfit,
+      maxLoss: lpDebit,
+      breakeven: +(lp.strike - lpDebit).toFixed(2),
+      riskRewardRatio: +(lpMaxProfit / lpDebit).toFixed(2),
+      probabilityOfProfit: +(Math.random() * 10 + 42).toFixed(1),
       netPremium: 0,
-      netDebit: bpDebit,
-      score: Math.floor(Math.random() * 20 + 55),
+      netDebit: lpDebit,
+      score: Math.floor(Math.random() * 15 + 65),
       sentiment: 'Bearish',
-      expiry: EXPIRIES[1],
-      daysToExpiry: daysUntil(EXPIRIES[1]),
+      expiry: EXPIRIES[2],
+      daysToExpiry: daysUntil(EXPIRIES[2]),
       underlyingPrice: price,
-      tags: ['Defined Risk', 'Bearish'],
+      tags: ['Bearish', 'Defined Risk'],
     })
 
     // Long Straddle
@@ -200,10 +172,10 @@ function generateStrategies(): Strategy[] {
       maxLoss: strDebit,
       breakeven: [+(Math.round(price) - strDebit).toFixed(2), +(Math.round(price) + strDebit).toFixed(2)],
       riskRewardRatio: 999,
-      probabilityOfProfit: +(Math.random() * 20 + 35).toFixed(1),
+      probabilityOfProfit: +(Math.random() * 15 + 35).toFixed(1),
       netPremium: 0,
       netDebit: strDebit,
-      score: Math.floor(Math.random() * 20 + 60),
+      score: Math.floor(Math.random() * 15 + 62),
       sentiment: 'Neutral',
       expiry: EXPIRIES[2],
       daysToExpiry: daysUntil(EXPIRIES[2]),
@@ -211,34 +183,28 @@ function generateStrategies(): Strategy[] {
       tags: ['Volatility Play', 'Unlimited Upside'],
     })
 
-    // Iron Condor
-    const icBuyPut = makeContract(asset.symbol, Math.round(price * 0.88), 'PUT', EXPIRIES[3], price, iv)
-    const icSellPut = makeContract(asset.symbol, Math.round(price * 0.93), 'PUT', EXPIRIES[3], price, iv)
-    const icSellCall = makeContract(asset.symbol, Math.round(price * 1.07), 'CALL', EXPIRIES[3], price, iv)
-    const icBuyCall = makeContract(asset.symbol, Math.round(price * 1.12), 'CALL', EXPIRIES[3], price, iv)
-    const icPremium = +((icSellPut.bid - icBuyPut.ask) + (icSellCall.bid - icBuyCall.ask)).toFixed(2)
-    const icWidth = icSellPut.strike - icBuyPut.strike
+    // Long Strangle (OTM ~5%)
+    const strgCall = makeContract(asset.symbol, Math.round(price * 1.05), 'CALL', EXPIRIES[3], price, iv)
+    const strgPut  = makeContract(asset.symbol, Math.round(price * 0.95), 'PUT',  EXPIRIES[3], price, iv)
+    const strgDebit = +(strgCall.ask + strgPut.ask).toFixed(2)
     strategies.push({
       id: `s${id++}`,
       symbol: asset.symbol,
-      type: 'Iron Condor',
-      legs: [icBuyPut, icSellPut, icSellCall, icBuyCall],
-      maxProfit: icPremium,
-      maxLoss: +(icWidth - icPremium).toFixed(2),
-      breakeven: [
-        +(icSellPut.strike - icPremium).toFixed(2),
-        +(icSellCall.strike + icPremium).toFixed(2),
-      ],
-      riskRewardRatio: +(icPremium / (icWidth - icPremium)).toFixed(2),
-      probabilityOfProfit: +(Math.random() * 10 + 68).toFixed(1),
-      netPremium: icPremium,
-      netDebit: 0,
-      score: Math.floor(Math.random() * 15 + 72),
+      type: 'Long Strangle',
+      legs: [strgCall, strgPut],
+      maxProfit: Infinity,
+      maxLoss: strgDebit,
+      breakeven: [+(strgPut.strike - strgDebit).toFixed(2), +(strgCall.strike + strgDebit).toFixed(2)],
+      riskRewardRatio: 999,
+      probabilityOfProfit: +(Math.random() * 15 + 28).toFixed(1),
+      netPremium: 0,
+      netDebit: strgDebit,
+      score: Math.floor(Math.random() * 15 + 58),
       sentiment: 'Neutral',
       expiry: EXPIRIES[3],
       daysToExpiry: daysUntil(EXPIRIES[3]),
       underlyingPrice: price,
-      tags: ['Range Bound', 'High Probability'],
+      tags: ['Volatility Play', 'Cheaper than Straddle'],
     })
   })
 

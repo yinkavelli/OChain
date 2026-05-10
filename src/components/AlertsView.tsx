@@ -3,9 +3,9 @@ import { Bell, TrendingUp, TrendingDown, Zap, Plus } from 'lucide-react'
 
 const ALERTS = [
   { id: 1, symbol: 'BTC', type: 'IV Spike', message: 'IV jumped to 78.2%, up 15% from 24h low', time: '2m ago', severity: 'high', icon: Zap },
-  { id: 2, symbol: 'ETH', type: 'High PoP Setup', message: 'Iron Condor with 82% PoP detected on Jun expiry', time: '8m ago', severity: 'medium', icon: TrendingUp },
-  { id: 3, symbol: 'SOL', type: 'IV Rank Alert', message: 'IV Rank hit 85 — potential premium selling opportunity', time: '14m ago', severity: 'high', icon: Bell },
-  { id: 4, symbol: 'BNB', type: 'Spread Opportunity', message: 'Bull call spread with 2.4x R/R detected', time: '22m ago', severity: 'low', icon: TrendingUp },
+  { id: 2, symbol: 'ETH', type: 'Volatility Setup', message: 'Long Strangle with high IV detected on Jun expiry', time: '8m ago', severity: 'medium', icon: TrendingUp },
+  { id: 3, symbol: 'SOL', type: 'IV Rank Alert', message: 'IV Rank hit 85 — elevated premium on long options', time: '14m ago', severity: 'high', icon: Bell },
+  { id: 4, symbol: 'BNB', type: 'Long Call Setup', message: 'ATM Long Call with strong delta detected', time: '22m ago', severity: 'low', icon: TrendingUp },
   { id: 5, symbol: 'XRP', type: 'IV Crush Risk', message: 'Earnings-like event may compress IV post-announcement', time: '1h ago', severity: 'medium', icon: TrendingDown },
 ]
 

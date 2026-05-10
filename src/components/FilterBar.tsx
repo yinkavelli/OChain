@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import type { StrategyType } from '../data/mockData'
 
 const STRATEGIES: Array<StrategyType | 'All'> = [
-  'All', 'Covered Call', 'Bull Call Spread', 'Bear Put Spread', 'Long Straddle', 'Iron Condor',
+  'All', 'Long Call', 'Long Put', 'Long Straddle', 'Long Strangle',
 ]
 
 const SENTIMENTS = ['All', 'Bullish', 'Bearish', 'Neutral']
